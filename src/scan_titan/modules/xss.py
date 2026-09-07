@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import urllib.parse
 
-from .common import Finding, ScanContext, VulnerabilityModule, url_with_params
+from .common import Finding, ScanContext, VulnerabilityModule, run_bounded, url_with_params
 from .payload_utils import xss_payloads
 
 
@@ -43,11 +43,11 @@ class XssModule(VulnerabilityModule):
 
         async def probe(url: str, param: str, payload: str) -> None:
             nonlocal tested
+            result = await ctx.http.request("GET", url, params={param: payload})
             async with local_lock:
                 tested += 1
-                if tested == 1 or tested % 20 == 0:
+                if tested == 1 or tested % 20 == 0 or tested == len(specs):
                     ctx.heartbeat(self.name, f"{param}={payload[:28]}", tested, len(findings))
-            result = await ctx.http.request("GET", url, params={param: payload})
             if not result:
                 return
             content_type = result.content_type.lower()
@@ -75,14 +75,18 @@ class XssModule(VulnerabilityModule):
                     )
                 )
 
-        tasks = []
+        specs = []
         for url, params in candidates:
             for param in params[:10]:
                 for payload in payloads:
-                    if len(tasks) >= ctx.limits.max_tests_per_module:
+                    if len(specs) >= ctx.limits.max_tests_per_module:
                         break
-                    tasks.append(probe(url, param, payload))
-        await asyncio.gather(*tasks)
+                    specs.append((url, param, payload))
+
+        async def run_probe(spec: tuple[str, str, str]) -> None:
+            await probe(*spec)
+
+        await run_bounded(specs, run_probe, should_stop=ctx.should_stop)
         return findings
 
     def _candidate_urls(self, ctx: ScanContext) -> list[tuple[str, list[str]]]:

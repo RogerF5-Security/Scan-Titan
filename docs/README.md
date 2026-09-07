@@ -89,6 +89,10 @@ Para monitorear otra carpeta copiada:
 python .\main.py --monitor --path C:\Ruta\A\OtroEscaneo
 ```
 
+El monitor detecta la telemetria en `audit_reports/` o `reports/` y respeta las rutas de entorno del escaneo. Si pasan mas de 60 segundos sin actualizacion, muestra `SIN ACTUALIZAR`; un porcentaje antiguo no confirma que el proceso siga avanzando.
+
+LFI, XSS, SSRF y fuzzing de rutas usan un grupo de hasta 20 trabajadores. Los contadores avanzan al terminar cada intento, y cada 15 segundos se informa de peticiones HTTP terminadas, activas y en espera. Se conserva el jitter configurado: 10.000 peticiones a 1-2 segundos entre inicios pueden requerir unas cuatro horas. `F` evita consumir toda la cola pendiente antes de finalizar. Las mejoras requieren reiniciar las ejecuciones iniciadas con versiones anteriores.
+
 ## Salidas
 
 El lanzador `main.py` incluido escribe por defecto en:

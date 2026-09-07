@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import urllib.parse
 
-from .common import Finding, ScanContext, VulnerabilityModule, url_with_params
+from .common import Finding, ScanContext, VulnerabilityModule, run_bounded, url_with_params
 from .payload_utils import lfi_payloads
 
 
@@ -72,11 +72,11 @@ class LfiModule(VulnerabilityModule):
             baseline: object | None,
         ) -> None:
             nonlocal tested
+            result = await ctx.http.request("GET", url, params={param: payload})
             async with lock:
                 tested += 1
-                if tested == 1 or tested % 20 == 0:
+                if tested == 1 or tested % 20 == 0 or tested == len(probe_specs):
                     ctx.heartbeat(self.name, f"{param}={payload[:28]}", tested, len(findings))
-            result = await ctx.http.request("GET", url, params={param: payload})
             if not result or not baseline or int(result.status or 0) >= 400:
                 return
             if marker not in result.text or marker in baseline.text:
@@ -103,11 +103,11 @@ class LfiModule(VulnerabilityModule):
                 )
             )
 
-        tasks = [
-            probe(url, param, payload, marker, baselines.get((url, param)))
-            for url, param, payload, marker in probe_specs
-        ]
-        await asyncio.gather(*tasks)
+        async def run_probe(spec: tuple[str, str, str, str]) -> None:
+            url, param, payload, marker = spec
+            await probe(url, param, payload, marker, baselines.get((url, param)))
+
+        await run_bounded(probe_specs, run_probe, should_stop=ctx.should_stop)
         return findings
 
     def _candidate_urls(self, ctx: ScanContext) -> list[tuple[str, list[str]]]:

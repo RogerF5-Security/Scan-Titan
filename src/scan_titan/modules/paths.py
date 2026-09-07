@@ -12,6 +12,7 @@ from .common import (
     ScanContext,
     VulnerabilityModule,
     is_soft_auth_redirect,
+    run_bounded,
     soft_auth_redirect_reason,
 )
 
@@ -90,11 +91,11 @@ class PathDiscoveryModule(VulnerabilityModule):
 
         async def probe(path: str) -> None:
             nonlocal tested
+            url = urllib.parse.urljoin(ctx.target.url, path)
+            result = await ctx.http.request("GET", url, allow_redirects=False)
             tested += 1
             if tested == 1 or tested % 25 == 0:
                 ctx.heartbeat(self.name, path, tested, len(findings))
-            url = urllib.parse.urljoin(ctx.target.url, path)
-            result = await ctx.http.request("GET", url, allow_redirects=False)
             if not result:
                 return
             if result.status in self.WORDLIST_HIT_STATUSES:
@@ -150,7 +151,9 @@ class PathDiscoveryModule(VulnerabilityModule):
                     if bypass:
                         findings.append(bypass)
 
-        await asyncio.gather(*(probe(path) for path in paths[: ctx.limits.max_tests_per_module]))
+        await run_bounded(
+            paths[:ctx.limits.max_tests_per_module], probe, should_stop=ctx.should_stop,
+        )
         ctx.recon["wordlist_path_hits"] = list(
             ctx.recon.get("wordlist_path_hits", []) + sorted(wordlist_hits, key=lambda item: (item["status"], item["path"]))
         )

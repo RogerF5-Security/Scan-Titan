@@ -39,11 +39,35 @@ DEFAULT_BASE_DIR = Path(os.environ.get("SCAN_TITAN_BASE_DIR", Path(__file__).res
 
 
 def resolve_reports_dir(base_dir: Path) -> Path:
-    reports = base_dir / "reports"
-    legacy = base_dir / "audit_reports"
-    if reports.exists() or not legacy.exists():
-        return reports
-    return legacy
+    base_dir = base_dir.resolve()
+    same_scan = base_dir == Path(os.environ.get("SCAN_TITAN_BASE_DIR", DEFAULT_BASE_DIR)).resolve()
+    configured = os.environ.get("SCAN_TITAN_RUNTIME_FILE", "") if same_scan else ""
+    if configured and Path(configured).is_file():
+        return Path(configured).resolve().parent
+    output = os.environ.get("SCAN_TITAN_REPORTS_DIR", "") if same_scan else ""
+    candidates = list(dict.fromkeys(
+        ([Path(output).resolve()] if output else [])
+        + [base_dir / "audit_reports", base_dir / "reports"]
+    ))
+    available = [path for path in candidates if (path / RUNTIME_NAME).is_file()]
+    if available:
+        return max(available, key=lambda path: (path / RUNTIME_NAME).stat().st_mtime)
+    return next((path for path in candidates if path.exists()), candidates[0])
+
+
+def resolve_runtime_file(base_dir: Path) -> Path:
+    configured = os.environ.get("SCAN_TITAN_RUNTIME_FILE", "")
+    same_scan = base_dir.resolve() == Path(os.environ.get("SCAN_TITAN_BASE_DIR", DEFAULT_BASE_DIR)).resolve()
+    if same_scan and configured and Path(configured).is_file():
+        return Path(configured).resolve()
+    return resolve_reports_dir(base_dir) / RUNTIME_NAME
+
+
+def runtime_is_stale(data: dict[str, Any], max_age: float = 60.0) -> bool:
+    if data.get("status") not in {"running", "finishing"}:
+        return False
+    updated = parse_timestamp(data.get("updated_at"))
+    return updated is None or (datetime.now() - updated).total_seconds() > max_age
 
 
 def parse_args() -> argparse.Namespace:
@@ -77,7 +101,8 @@ def read_json(path: Path) -> dict[str, Any]:
     try:
         if not path.exists():
             return {}
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
     except Exception:
         return {}
 
@@ -152,7 +177,8 @@ class MonitorApp(tk.Tk):
         super().__init__()
         self.base_dir = base_dir.resolve()
         self.reports_dir = resolve_reports_dir(self.base_dir)
-        self.runtime_file = self.reports_dir / RUNTIME_NAME
+        self.runtime_file = resolve_runtime_file(self.base_dir)
+        self._refresh_job: str | None = None
         self.title(APP_TITLE)
         self.geometry("1240x820")
         self.minsize(1080, 680)
@@ -355,7 +381,7 @@ class MonitorApp(tk.Tk):
             return
         self.base_dir = Path(chosen).resolve()
         self.reports_dir = resolve_reports_dir(self.base_dir)
-        self.runtime_file = self.reports_dir / RUNTIME_NAME
+        self.runtime_file = resolve_runtime_file(self.base_dir)
         self.path_var.set(str(self.base_dir))
         self.refresh()
 
@@ -372,12 +398,17 @@ class MonitorApp(tk.Tk):
         messagebox.showwarning(APP_TITLE, "No encontre dashboard HTML en esta carpeta.")
 
     def refresh(self) -> None:
+        if self._refresh_job is not None:
+            self.after_cancel(self._refresh_job)
+            self._refresh_job = None
+        self.runtime_file = resolve_runtime_file(self.base_dir)
+        self.reports_dir = self.runtime_file.parent
         data = read_json(self.runtime_file)
         if not data:
             self._render_fallback()
         else:
             self._render_runtime(data)
-        self.after(REFRESH_MS, self.refresh)
+        self._refresh_job = self.after(REFRESH_MS, self.refresh)
 
     def _render_fallback(self) -> None:
         state_file = self.reports_dir / "scan_titan_state.json"
@@ -440,13 +471,17 @@ class MonitorApp(tk.Tk):
 
     def _render_runtime(self, data: dict[str, Any]) -> None:
         status = safe_text(data.get("status") or "unknown").upper()
-        self._set_status(status, self._status_color(status.lower()))
+        stale = runtime_is_stale(data)
+        self._set_status("SIN ACTUALIZAR" if stale else status, "#f39c12" if stale else self._status_color(status.lower()))
         global_percent = self._float_value(data.get("global_percent"))
         module_percent = self._float_value(data.get("module_percent"))
         self.global_bar["value"] = global_percent
         self.module_bar["value"] = module_percent
         self.global_text.configure(text=f"{global_percent:.2f}%")
         self.module_text.configure(text=f"{module_percent:.2f}%")
+        if stale:
+            self.global_text.configure(text="Ultimo dato")
+            self.module_text.configure(text="Sin datos recientes")
 
         target = safe_text(data.get("current_target") or "-", 90)
         phase = safe_text(data.get("current_phase") or "-", 90)
@@ -464,7 +499,11 @@ class MonitorApp(tk.Tk):
         unique_count = int(data.get("finding_unique") or sum(int(v or 0) for v in (data.get("findings") or {}).values()))
         occurrence_count = int(data.get("finding_occurrences") or unique_count)
         self.metric_vars["findings"].set(f"{counts_text}\nU:{unique_count} | O:{occurrence_count}")
-        self.metric_vars["elapsed"].set(format_seconds(data.get("elapsed_seconds")))
+        started = parse_timestamp(data.get("started_at"))
+        elapsed = data.get("elapsed_seconds")
+        if started and data.get("status") in {"running", "paused", "finishing"}:
+            elapsed = (datetime.now() - started).total_seconds()
+        self.metric_vars["elapsed"].set(format_seconds(elapsed))
 
         self._replace_rows(
             self.modules_tree,
@@ -531,6 +570,10 @@ class MonitorApp(tk.Tk):
         last_error = safe_text(data.get("last_error") or "", 240)
         last_warning = safe_text(data.get("last_warning") or "", 240)
         footer = f"Actualizado {update_age_text(updated)} | Runtime: {self.runtime_file}"
+        if stale:
+            footer += " | Telemetria antigua: no confirma avance del proceso"
+        elif data.get("current_detail"):
+            footer += f" | {safe_text(data['current_detail'], 220)}"
         if last_error:
             footer += f" | Ultimo error: {last_error}"
         elif last_warning:

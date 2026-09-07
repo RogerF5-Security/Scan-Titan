@@ -2,7 +2,7 @@
 
 Motor de auditoria automatizada en Python: reconocimiento, pruebas web, orquestacion de herramientas externas y reportes de vulnerabilidades. Preparacion de la edicion comunitaria para Pwn3d!.
 
-**Version del motor:** 21.3.0. **Estado:** preparacion privada; la publicacion se realizara el dia del evento.
+**Version del motor:** 21.3.1. **Estado:** preparacion privada; la publicacion se realizara el dia del evento.
 
 ## Inicio rapido
 

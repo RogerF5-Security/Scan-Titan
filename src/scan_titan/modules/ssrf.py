@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import urllib.parse
 
-from .common import Finding, ScanContext, VulnerabilityModule, clean_text, url_with_params
+from .common import Finding, ScanContext, VulnerabilityModule, clean_text, run_bounded, url_with_params
 
 
 def ssrf_response_proven(
@@ -118,10 +118,6 @@ class SsrfModule(VulnerabilityModule):
             baseline: object | None,
         ) -> None:
             nonlocal tested
-            async with lock:
-                tested += 1
-                if tested == 1 or tested % 20 == 0:
-                    ctx.heartbeat(self.name, f"{param}->{payload[:34]}", tested, len(findings))
             result = await ctx.http.request(
                 "GET",
                 url,
@@ -129,6 +125,10 @@ class SsrfModule(VulnerabilityModule):
                 allow_redirects=True,
                 timeout=max(ctx.limits.timeout, 8),
             )
+            async with lock:
+                tested += 1
+                if tested == 1 or tested % 20 == 0 or tested == len(specs):
+                    ctx.heartbeat(self.name, f"{param}->{payload[:34]}", tested, len(findings))
             if not result:
                 return
             proven, marker = ssrf_response_proven(result, payload, proof_markers, baseline)
@@ -159,13 +159,17 @@ class SsrfModule(VulnerabilityModule):
                 )
             )
 
-        tasks = []
+        specs = []
         for url, param in targets:
             for payload, proof_markers in payloads:
-                if len(tasks) >= ctx.limits.max_tests_per_module:
+                if len(specs) >= ctx.limits.max_tests_per_module:
                     break
-                tasks.append(probe(url, param, payload, tuple(proof_markers), baselines.get((url, param))))
-        await asyncio.gather(*tasks)
+                specs.append((url, param, payload, tuple(proof_markers), baselines.get((url, param))))
+
+        async def run_probe(spec: tuple) -> None:
+            await probe(*spec)
+
+        await run_bounded(specs, run_probe, should_stop=ctx.should_stop)
         return findings
 
     def _candidate_params(self, ctx: ScanContext) -> list[tuple[str, str]]:

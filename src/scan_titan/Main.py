@@ -239,7 +239,7 @@ KNOWLEDGE_FILE = _path_from_env(
     "SCAN_TITAN_KNOWLEDGE_FILE",
     _first_existing(BASE_DIR / "data" / "scan_titan_knowledge.json", BASE_DIR / "scan_titan_knowledge.json"),
 )
-SCAN_VERSION = "TITAN v21.3.0 COMMUNITY ZERO-TOUCH"
+SCAN_VERSION = "TITAN v21.3.1 COMMUNITY ZERO-TOUCH"
 HEADER_SEPARATOR = "=" * 72
 REPORT_SEPARATOR = "─" * 72
 
@@ -454,6 +454,16 @@ class RuntimeTelemetry:
         }
         self.event("MODULE", f"{module} {estados.get(status, status)} con {len(findings)} hallazgo(s)")
         self._active_module_name = ""
+        self.write()
+
+    def module_activity(self, module: str, detail: str, http: dict[str, Any]) -> None:
+        self.state["current_detail"] = detail
+        self.state["http_activity"] = http
+        self._upsert_module(module, {
+            "detail": detail,
+            "http_activity": http,
+            "duration_seconds": round(time.monotonic() - self._module_started, 1),
+        })
         self.write()
 
     def external_start(self, tool: str, profile: str, target: str, command: list[str] | None = None) -> None:
@@ -5870,6 +5880,8 @@ class FindingScorer:
 
 
 class ScanTitan:
+    MODULE_HEARTBEAT_SECONDS = 15.0
+
     def __init__(self, config: RuntimeConfig) -> None:
         self.config = config
         self.telemetry = RuntimeTelemetry(RUNTIME_FILE)
@@ -6259,6 +6271,28 @@ class ScanTitan:
         Console.heartbeat(module, detail, tested, found)
         self.telemetry.heartbeat(module, detail, tested, found)
 
+    async def _module_pulse(self, module: str, ctx: ScanContext) -> None:
+        started = time.monotonic()
+        initial_completed = ctx.http.requests_completed
+        while True:
+            await asyncio.sleep(self.MODULE_HEARTBEAT_SECONDS)
+            now = time.monotonic()
+            active = ctx.http.requests_active
+            stats = {
+                "completed": ctx.http.requests_completed - initial_completed,
+                "active": active,
+                "waiting": max(0, ctx.http.requests_waiting - active),
+                "seconds_without_response": round(now - max(started, ctx.http.last_completed_at), 1),
+            }
+            status = "en pausa" if self.config.runtime_control.is_paused else "en curso"
+            detail = (
+                f"{status} | {now - started:.0f}s | HTTP terminadas={stats['completed']} "
+                f"activas={active} en espera={stats['waiting']} | "
+                f"ultima respuesta hace {stats['seconds_without_response']:.0f}s"
+            )
+            Console.step(f"{module}: {detail}")
+            self.telemetry.module_activity(module, detail, stats)
+
     async def _run_module(self, module: Any, ctx: ScanContext, timeout: int) -> list[Finding]:
         Console.phase(f"MODULE: {module.name}")
         throttle = self.config.apply_module_throttle(module.name, ctx.limits)
@@ -6271,6 +6305,7 @@ class ScanTitan:
         )
         self.telemetry.module_start(ctx.target, module.name, ctx.limits.max_tests_per_module, timeout)
         started = time.monotonic()
+        pulse_task = asyncio.create_task(self._module_pulse(module.name, ctx))
         try:
             await self.config.runtime_control.wait_if_paused()
             if self.config.runtime_control.finish_requested:
@@ -6281,7 +6316,8 @@ class ScanTitan:
             else:
                 findings = await asyncio.wait_for(module.run(ctx), timeout=timeout)
             self._emit_new_findings(findings)
-            self.telemetry.module_end(module.name, findings, "finished")
+            status = "skipped" if self.config.runtime_control.finish_requested else "finished"
+            self.telemetry.module_end(module.name, findings, status)
             Console.ok(f"{module.name}: {len(findings)} hallazgo(s) en {time.monotonic() - started:.1f}s")
             return findings
         except asyncio.TimeoutError:
@@ -6319,6 +6355,10 @@ class ScanTitan:
             ]
             self.telemetry.module_end(module.name, failed_findings, "failed", str(exc))
             return failed_findings
+        finally:
+            pulse_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await pulse_task
 
     def _emit_new_findings(self, findings: list[Finding]) -> None:
         display_findings = correlate_findings(self._reportable_findings(findings))

@@ -7,7 +7,7 @@ import re
 import time
 import urllib.parse
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable, Iterable, TypeVar
 
 import aiohttp
 
@@ -1091,6 +1091,44 @@ class ScanContext:
     heartbeat: Callable[[str, str, int, int], None]
     policy: ScanPolicy = field(default_factory=ScanPolicy)
 
+    def should_stop(self) -> bool:
+        control = self.limits.runtime_control
+        return bool(
+            getattr(self.http, "circuit_open", False)
+            or (control and control.finish_requested)
+        )
+
+
+_Item = TypeVar("_Item")
+
+
+async def run_bounded(
+    items: Iterable[_Item],
+    probe: Callable[[_Item], Awaitable[None]],
+    *,
+    limit: int = 20,
+    should_stop: Callable[[], bool] | None = None,
+) -> None:
+    """Consume probes with a fixed worker pool, without queuing a task per payload."""
+    iterator = iter(items)
+
+    async def worker() -> None:
+        while not (should_stop and should_stop()):
+            try:
+                item = next(iterator)
+            except StopIteration:
+                return
+            await probe(item)
+
+    workers = [asyncio.create_task(worker()) for _ in range(max(1, min(20, limit)))]
+    try:
+        await asyncio.gather(*workers)
+    finally:
+        for task in workers:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*workers, return_exceptions=True)
+
 
 class AsyncHttpClient:
     def __init__(
@@ -1111,6 +1149,15 @@ class AsyncHttpClient:
         self.circuit_reason = ""
         self._start_lock = asyncio.Lock()
         self._request_starts = 0
+        self.requests_started = 0
+        self.requests_completed = 0
+        self.requests_waiting = 0
+        self.requests_active = 0
+        self.last_completed_at = time.monotonic()
+
+    def _stop_requested(self) -> bool:
+        control = self.limits.runtime_control
+        return self.circuit_open or bool(control and control.finish_requested)
 
     def open_circuit(self, reason: str) -> None:
         self.circuit_open = True
@@ -1127,26 +1174,48 @@ class AsyncHttpClient:
         allow_redirects: bool = False,
         timeout: float | None = None,
     ) -> HttpResult | None:
-        if self.circuit_open:
+        if self._stop_requested():
             return None
         if self.limits.runtime_control:
             await self.limits.runtime_control.wait_if_paused()
             if self.limits.runtime_control.finish_requested:
                 return None
-        await self._throttle_request_start()
+        self.requests_waiting += 1
+        try:
+            await self._throttle_request_start()
+            if self._stop_requested():
+                return None
+            return await self._perform_request(
+                method, url, params=params, data=data, headers=headers,
+                allow_redirects=allow_redirects, timeout=timeout,
+            )
+        finally:
+            self.requests_waiting -= 1
+
+    async def _perform_request(
+        self,
+        method: str,
+        url: str,
+        **kwargs: Any,
+    ) -> HttpResult | None:
         async with self.semaphore:
+            if self.limits.runtime_control:
+                await self.limits.runtime_control.wait_if_paused()
+            if self._stop_requested():
+                return None
             start = time.monotonic()
+            self.requests_started += 1
+            self.requests_active += 1
+            cancelled = False
             try:
+                timeout = kwargs.pop("timeout", None)
                 req_timeout = aiohttp.ClientTimeout(total=timeout or self.limits.timeout)
                 async with self.session.request(
                     method.upper(),
                     url,
-                    params=params,
-                    data=data,
-                    headers=headers,
-                    allow_redirects=allow_redirects,
                     timeout=req_timeout,
                     ssl=None if self.verify_tls else False,
+                    **kwargs,
                 ) as response:
                     raw = await response.content.read(self.limits.max_body_bytes)
                     charset = response.charset or "utf-8"
@@ -1179,11 +1248,19 @@ class AsyncHttpClient:
                         request_url=str(response.url),
                         request_headers={str(k): str(v) for k, v in response.request_info.headers.items()},
                     )
-            except (aiohttp.ClientError, asyncio.TimeoutError):
+            except asyncio.CancelledError:
+                cancelled = True
+                raise
+            except (aiohttp.ClientError, asyncio.TimeoutError, OSError):
                 self.failure_streak += 1
                 if self.failure_streak >= self.circuit_after:
                     self.open_circuit(f"{self.failure_streak} HTTP failures/timeouts")
                 return None
+            finally:
+                self.requests_active -= 1
+                if not cancelled:
+                    self.requests_completed += 1
+                    self.last_completed_at = time.monotonic()
 
     async def _throttle_request_start(self) -> None:
         base_delay = max(0.0, float(self.limits.delay_seconds or 0.0))
@@ -1193,9 +1270,15 @@ class AsyncHttpClient:
         if base_delay <= 0 and jitter_max <= 0:
             return
         async with self._start_lock:
+            if self._stop_requested():
+                return
             self._request_starts += 1
             if self._request_starts % batch_size == 0:
-                await asyncio.sleep(base_delay + random.uniform(jitter_min, jitter_max))
+                remaining = base_delay + random.uniform(jitter_min, jitter_max)
+                while remaining > 0 and not self._stop_requested():
+                    step = min(0.2, remaining)
+                    await asyncio.sleep(step)
+                    remaining -= step
 
 
 class VulnerabilityModule:
