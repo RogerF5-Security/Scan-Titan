@@ -1,4 +1,4 @@
-# Add one authorized target per line.
-# Examples:
-# https://example.com
+# Agrega un objetivo por linea en tu copia de trabajo.
+# Mantiene estos ejemplos comentados al hacer commits.
+# https://example.test
 # 192.0.2.10

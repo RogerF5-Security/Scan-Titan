@@ -95,7 +95,7 @@ function Install-WingetPackage {
     try {
         winget install --id $PackageId --silent --accept-package-agreements --accept-source-agreements
     } catch {
-        Write-Warn "winget install failed for $Label: $($_.Exception.Message)"
+        Write-Warn "winget install failed for ${Label}: $($_.Exception.Message)"
     }
 }
 

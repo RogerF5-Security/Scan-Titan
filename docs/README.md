@@ -12,7 +12,8 @@ Plantilla0/
   config/                 # configuracion y dependencias Python
   data/                   # base publica de conocimiento
   install/                # instaladores Windows y Linux
-  reports/                # salidas, dashboards y estado
+  audit_reports/          # salidas, dashboards y estado del lanzador
+  reports/                # compatibilidad con herramientas y pruebas
   src/scan_titan/         # motor del escaner
   targets/targets.txt     # un objetivo por linea
   templates/              # plantillas publicas de reporte
@@ -90,17 +91,13 @@ python .\main.py --monitor --path C:\Ruta\A\OtroEscaneo
 
 ## Salidas
 
-En Plantilla0, los archivos generados se escriben en:
-
-```text
-reports/
-```
-
-En la carpeta principal de trabajo `History`, se escriben en:
+El lanzador `main.py` incluido escribe por defecto en:
 
 ```text
 audit_reports/
 ```
+
+Las copias antiguas pueden usar `reports/`. Revisa la ruta que imprime el lanzador al finalizar. Para elegir otra salida, define `SCAN_TITAN_REPORTS_DIR` antes de ejecutar el proceso.
 
 Salidas principales:
 

@@ -28,12 +28,26 @@ class PublicTemplateTests(unittest.TestCase):
             ROOT / "targets" / "targets.txt",
             ROOT / "wordlists",
             ROOT / "reports",
+            ROOT / "tools" / "health_check.py",
             ENGINE / "Main.py",
             ENGINE / "modules",
         ]
         for path in required:
             with self.subTest(path=path):
                 self.assertTrue(path.exists(), str(path))
+
+    def test_required_wordlists_are_present_and_not_empty(self) -> None:
+        from Main import WordlistLoader
+
+        for filename in WordlistLoader.FILES.values():
+            path = ROOT / "wordlists" / filename
+            with self.subTest(wordlist=filename):
+                self.assertTrue(path.is_file(), str(path))
+                with path.open(encoding="utf-8", errors="replace") as handle:
+                    self.assertTrue(
+                        any(line.strip() and not line.lstrip().startswith("#") for line in handle),
+                        f"Wordlist sin entradas: {filename}",
+                    )
 
     def test_full_aliases_are_accepted(self) -> None:
         from Main import build_argparser

