@@ -220,7 +220,7 @@ class MonitorPathTests(unittest.TestCase):
             (base / "audit_reports").mkdir()
             runtime = base / "audit_reports" / "scan_titan_runtime.json"
             runtime.write_text("{}", encoding="utf-8")
-            self.assertEqual(resolve_runtime_file(base), runtime)
+            self.assertTrue(resolve_runtime_file(base).samefile(runtime))
 
     def test_other_copy_ignores_launchers_runtime_override(self) -> None:
         from ScanTitan_Monitor import resolve_runtime_file
@@ -234,7 +234,8 @@ class MonitorPathTests(unittest.TestCase):
                 "SCAN_TITAN_BASE_DIR": str(base / "a"),
                 "SCAN_TITAN_RUNTIME_FILE": str(base / "a" / "reports" / "scan_titan_runtime.json"),
             }):
-                self.assertEqual(resolve_runtime_file(base / "b"), base / "b" / "reports" / "scan_titan_runtime.json")
+                expected = base / "b" / "reports" / "scan_titan_runtime.json"
+                self.assertTrue(resolve_runtime_file(base / "b").samefile(expected))
 
     def test_running_stale_snapshot_is_not_shown_as_live(self) -> None:
         from ScanTitan_Monitor import runtime_is_stale
