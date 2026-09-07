@@ -1,0 +1,13 @@
+requests
+aiohttp
+beautifulsoup4
+colorama
+tqdm
+PyYAML
+pandas
+plotly
+openpyxl
+Pillow
+playwright
+pywin32; platform_system == "Windows"
+wafw00f

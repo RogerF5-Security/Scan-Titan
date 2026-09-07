@@ -1,0 +1,4 @@
+# Add one authorized target per line.
+# Examples:
+# https://example.com
+# 192.0.2.10

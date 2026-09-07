@@ -1,0 +1,275 @@
+authorization:
+  acknowledged: true
+  note: "Set true only for assets you own or are explicitly authorized to test."
+
+scan:
+  profile: zero-touch
+  targets: []
+  targets_file: targets/targets.txt
+  output_dir: reports
+  target_concurrency: 1
+  http_concurrency: 20
+  verify_tls: false
+  timeout_seconds: 8
+  delay_seconds: 0.02
+  jitter_min_seconds: 0.15
+  jitter_max_seconds: 0.35
+  throttle_batch_size: 25
+  payload_delay_seconds: 0.0
+  payload_jitter_min_seconds: 1.0
+  payload_jitter_max_seconds: 2.0
+  payload_throttle_batch_size: 1
+  route_delay_seconds: 0.0
+  route_jitter_min_seconds: 0.5
+  route_jitter_max_seconds: 1.5
+  route_throttle_batch_size: 10
+  module_timeout_seconds: 0
+  max_pages: 120
+  max_depth: 3
+  max_tests_per_module: 10000
+  max_wordlist_entries: 50000
+  module_test_budgets:
+    recon_surface: 10000
+    api_spa: 10000
+    api_dast: 10000
+    site_map: 120
+    unauthenticated_map: 10000
+    path_discovery: 10000
+    headers: 120
+    infra_network: 120
+    crypto_tls: 120
+    auth_session: 10000
+    authorization: 10000
+    sqli: 10000
+    lfi: 10000
+    ssrf: 10000
+    injection: 10000
+    xss: 10000
+    cors: 80
+    waf_resilience: 180
+    client_side: 10000
+    browser_audit: 120
+    advanced_logic: 220
+  module_timeout_overrides:
+    recon_surface: 0
+    api_spa: 0
+    api_dast: 0
+    site_map: 0
+    unauthenticated_map: 0
+    path_discovery: 0
+    sqli: 0
+    lfi: 0
+    ssrf: 0
+    injection: 0
+    xss: 0
+    waf_resilience: 0
+    client_side: 0
+    browser_audit: 0
+  module_throttle_overrides:
+    sqli:
+      delay_seconds: 0.0
+      jitter_min_seconds: 0.35
+      jitter_max_seconds: 1.0
+      throttle_batch_size: 12
+  user_agents:
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"
+    - "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36"
+    - "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/605.1.15 Safari/605.1.15"
+
+console:
+  enabled: true
+  external_output: true
+  nuclei_stats: true
+  show_execution_plan: true
+  show_zero_finding_modules: true
+
+environment:
+  auto_install_python: true
+  auto_install_binaries: true
+  stop_on_missing_required: true
+
+knowledge_base:
+  enabled: true
+  path: data/scan_titan_knowledge.json
+  min_score: 7.0
+
+modules:
+  legacy_catalog: true
+  recon:
+    nmap: true
+    vhost: true
+    tls: true
+    exposed_files: true
+  mapping:
+    spider: true
+    unauthenticated_routes: true
+    javascript_static: true
+    headers_csp: true
+  fuzzing:
+    directories: true
+    nuclei: true
+    wordpress: false
+  active:
+    injections: true
+    file_upload: true
+    traffic_control: true
+  auth_api:
+    authentication: true
+    bruteforce: false
+    sessions_api: true
+
+wordlists:
+  403bypass: wordlists/403bypass.txt
+  command_injection: wordlists/command_injection.txt
+  directories: wordlists/rutas.txt
+  lfi: wordlists/lfi.txt
+  passwords: wordlists/passwords.txt
+  rutas: wordlists/rutas.txt
+  subdomains: wordlists/subdomains.txt
+  sqli: wordlists/sqli.txt
+  ssrf: wordlists/ssrf.txt
+  ssti: wordlists/ssti.txt
+  xss: wordlists/xss.txt
+  xss_payloads: wordlists/xss_payloads.txt
+  users: wordlists/users.txt
+
+tools:
+  nmap:
+    enabled: true
+    binary: nmap
+    timeout_seconds: 0
+    profiles:
+      - network_vulnerability_scan
+      - ssl_tls_surface
+      - http_slowloris_check
+      - vulners_cvss
+    profile_timeouts:
+      network_vulnerability_scan: 0
+      ssl_tls_surface: 0
+      http_slowloris_check: 0
+      vulners_cvss: 0
+  ffuf:
+    enabled: true
+    binary: ffuf
+    threads: 20
+    rate: 35
+    max_words: 10000
+    timeout_seconds: 420
+    use_external: true
+  whatweb:
+    enabled: true
+    binary: whatweb
+    aggression: 3
+    follow_redirect: always
+    max_redirects: 10
+    open_timeout_seconds: 15
+    read_timeout_seconds: 30
+    max_threads: 1
+    timeout_seconds: 90
+  subfinder:
+    enabled: true
+    binary: subfinder
+    timeout_seconds: 180
+  wafw00f:
+    enabled: true
+    binary: wafw00f
+    timeout_seconds: 240
+  nuclei:
+    enabled: true
+    binary: nuclei
+    templates_path: nuclei-templates
+    severity: critical,high,medium,low
+    system_resolvers: true
+    disable_host_error_skip: true
+    retries: 1
+    request_timeout_seconds: 10
+    timeout_seconds: 0
+    profiles:
+      - vulnerability_scan
+      - conservative_scan
+      - cve_scan
+    profile_timeouts:
+      vulnerability_scan: 0
+      conservative_scan: 0
+      cve_scan: 0
+  zap:
+    enabled: true
+    binary: zap.bat
+    api_url: http://127.0.0.1:8090
+    api_key: ""
+    mode: active
+    start_daemon: true
+    shutdown_after_scan: true
+    host: 127.0.0.1
+    port: 8090
+    startup_timeout_seconds: 90
+    timeout_seconds: 0
+    spider_timeout_seconds: 0
+    passive_timeout_seconds: 0
+    active_timeout_seconds: 0
+    max_seed_urls: 60
+    max_alerts: 250
+    max_children: 20
+
+active_testing:
+  perform_upload_attempts: true
+  allow_state_changing_api_tests: true
+  allow_cloud_ssrf: false
+  allow_bruteforce: false
+  allow_rate_limit_probes: true
+  rate_limit_probe_requests: 10
+  safe_upload_filename: frankenstein_probe.txt
+
+module_policy:
+  enabled_modules: []
+  disabled_modules: []
+
+api_dast:
+  openapi: true
+  graphql: true
+  sourcemaps: true
+  json_body_tests: true
+
+browser:
+  enabled: true
+  max_pages: 15
+  timeout_seconds: 15
+
+evidence:
+  cards: true
+  console_screenshot_on_new_findings: false
+  browser_screenshots_on_findings: true
+  browser_screenshot_max_per_target: 150
+
+external_observability:
+  enabled: true
+
+auth_profiles: []
+
+exposed_files:
+  paths:
+    - /.git/config
+    - /.env
+    - /.svn/entries
+    - /.DS_Store
+    - /backup.zip
+    - /backup.tar.gz
+    - /config.php~
+    - /web.config
+    - /composer.json
+    - /package.json
+    - /.well-known/security.txt
+
+reporting:
+  formats: [json, html, markdown, txt]
+  include_legacy_catalog: true
+  min_severity: Low
+  include_recon_info_findings: false
+  include_pipeline_findings: false
+  technical_detail:
+    enabled: false
+
+dashboard:
+  default_asset_criticality: "Medio"
+  # Opcional: sobreescriba por hostname o IP con Bajo, Medio, Alto o Critico.
+  asset_criticality: {}

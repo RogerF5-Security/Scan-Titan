@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scan Titan | Motor Zero-Touch de Auditoria</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #08090c;
+      --panel: #111318;
+      --panel-2: #171a21;
+      --line: #303541;
+      --text: #f4f7fb;
+      --muted: #a8b1bf;
+      --red: #ef3340;
+      --cyan: #33d6ff;
+      --green: #3ee37c;
+      --amber: #ffb020;
+      --violet: #a78bfa;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background:
+        linear-gradient(135deg, rgba(239, 51, 64, 0.16), transparent 34%),
+        linear-gradient(225deg, rgba(51, 214, 255, 0.12), transparent 32%),
+        var(--bg);
+      color: var(--text);
+      font: 15px/1.55 "Segoe UI", Arial, sans-serif;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    code {
+      color: #d9f6ff;
+      font-family: Consolas, "Cascadia Mono", monospace;
+    }
+
+    .shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(8, 9, 12, 0.88);
+      backdrop-filter: blur(16px);
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      min-height: 68px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .mark {
+      display: grid;
+      width: 38px;
+      height: 38px;
+      place-items: center;
+      border: 1px solid var(--red);
+      background: #1a0d10;
+      color: var(--red);
+      font-weight: 950;
+    }
+
+    .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .links a {
+      padding: 8px 10px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .links a:hover {
+      border-color: var(--line);
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.03fr) minmax(360px, 0.97fr);
+      gap: 30px;
+      align-items: center;
+      min-height: calc(100vh - 68px);
+      padding: 54px 0 44px;
+    }
+
+    .eyebrow {
+      color: var(--cyan);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      line-height: 1.08;
+    }
+
+    h1 {
+      margin-top: 12px;
+      font-size: clamp(44px, 7vw, 84px);
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .subtitle {
+      max-width: 680px;
+      margin: 18px 0 0;
+      color: #d4dbe6;
+      font-size: 19px;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 0 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-2);
+      color: var(--text);
+      font-weight: 900;
+    }
+
+    .btn.primary {
+      border-color: #ff5360;
+      background: var(--red);
+      color: white;
+    }
+
+    .terminal {
+      border: 1px solid #3b414d;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #050608;
+      box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
+    }
+
+    .terminal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-bottom: 1px solid #292e38;
+      background: #151820;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .lights {
+      display: flex;
+      gap: 7px;
+    }
+
+    .lights span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--red);
+    }
+
+    .lights span:nth-child(2) {
+      background: var(--amber);
+    }
+
+    .lights span:nth-child(3) {
+      background: var(--green);
+    }
+
+    .terminal pre {
+      margin: 0;
+      padding: 18px;
+      min-height: 390px;
+      color: #d9f6ff;
+      font: 13px/1.55 Consolas, "Cascadia Mono", monospace;
+      white-space: pre-wrap;
+    }
+
+    .wall {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 4px;
+      margin: 22px 0 0;
+      max-width: 560px;
+    }
+
+    .wall span {
+      display: block;
+      height: 19px;
+      border: 1px solid #40363a;
+      background: #21191b;
+    }
+
+    .wall span:nth-child(8n),
+    .wall span:nth-child(13n),
+    .wall span:nth-child(22n) {
+      background: #431b22;
+      border-color: var(--red);
+      transform: rotate(-4deg) translateY(3px);
+    }
+
+    section {
+      padding: 42px 0;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .section-head p {
+      max-width: 620px;
+      margin: 0;
+      color: var(--muted);
+    }
+
+    h2 {
+      font-size: clamp(28px, 4vw, 42px);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(17, 19, 24, 0.92);
+      padding: 18px;
+    }
+
+    .card h3 {
+      font-size: 18px;
+      margin-bottom: 9px;
+    }
+
+    .card p,
+    .card li {
+      color: var(--muted);
+    }
+
+    .card ul {
+      margin: 10px 0 0;
+      padding-left: 18px;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .step {
+      min-height: 140px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #111318;
+      padding: 14px;
+    }
+
+    .step strong {
+      display: block;
+      color: var(--cyan);
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
+    .step span {
+      display: block;
+      margin-top: 8px;
+      font-weight: 900;
+    }
+
+    .step p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+      gap: 16px;
+    }
+
+    .matrix {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 8px;
+    }
+
+    .matrix th,
+    .matrix td {
+      padding: 12px;
+      border: 1px solid #323844;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .matrix th {
+      background: #222832;
+      color: #ffffff;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+    }
+
+    .matrix td {
+      background: rgba(17, 19, 24, 0.92);
+      color: var(--muted);
+    }
+
+    .footer {
+      border-top: 1px solid var(--line);
+      padding: 30px 0;
+      color: var(--muted);
+    }
+
+    @media (max-width: 980px) {
+      .hero,
+      .split {
+        grid-template-columns: 1fr;
+      }
+
+      .grid,
+      .flow {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .nav,
+      .section-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .grid,
+      .flow {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <nav class="shell nav" aria-label="Navegacion principal">
+      <a class="brand" href="#inicio"><span class="mark">ST</span><span>Scan Titan</span></a>
+      <div class="links">
+        <a href="#flujo">Flujo</a>
+        <a href="#motores">Motores</a>
+        <a href="#recon">Recon</a>
+        <a href="#reportes">Reportes</a>
+        <a href="#operacion">Operacion</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="inicio" class="shell">
+    <section class="hero">
+      <div>
+        <div class="eyebrow">Zero-Touch | Recon | DAST | Evidencia</div>
+        <h1>Scan Titan</h1>
+        <p class="subtitle">
+          Motor de auditoria automatizada creado para ejecutar reconocimiento, validacion de vulnerabilidades,
+          orquestacion externa y reporteria profesional con una sola orden.
+        </p>
+        <div class="actions">
+          <a class="btn primary" href="#flujo">Ver proceso interno</a>
+          <a class="btn" href="../README.md">Abrir guia tecnica</a>
+        </div>
+        <div class="wall" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+      <aside class="terminal" aria-label="Vista operacional de Scan Titan">
+        <div class="terminal-head">
+          <div class="lights"><span></span><span></span><span></span></div>
+          <span>main.py --full</span>
+        </div>
+        <pre>███████╗ ██████╗ █████╗ ███╗   ██╗
+SCAN TITAN :: WALL-BREACH VULNERABILITY ENGINE
+
+[+] Objetivos cargados desde targets/targets.txt
+[+] Wordlists activas: rutas, sqli, xss, lfi, ssrf, ssti
+[+] Nmap iniciado: perfiles NSE, TLS, Slowloris y Vulners
+[+] Nuclei iniciado: vulnerable, conservador y CVE
+[+] ZAP activo: spider, pasivo y validacion controlada
+[~] Heartbeat: proceso externo activo | sin limite
+[+] Recon_Sitemap.html actualizado por objetivo
+[+] Daily_vulns_report.html generado</pre>
+      </aside>
+    </section>
+
+    <section id="flujo">
+      <div class="section-head">
+        <h2>Flujo zero-touch</h2>
+        <p>El operador prepara objetivos autorizados y ejecuta el lanzador. El resto se encadena sin preguntas.</p>
+      </div>
+      <div class="flow">
+        <article class="step"><strong>01</strong><span>Entrada</span><p>Lectura sanitizada de objetivos y configuracion.</p></article>
+        <article class="step"><strong>02</strong><span>Recon</span><p>Tecnologias, rutas, headers, cookies, WAF y superficie.</p></article>
+        <article class="step"><strong>03</strong><span>DAST</span><p>Payloads context-aware con validacion antifalso positivo.</p></article>
+        <article class="step"><strong>04</strong><span>Externos</span><p>Nmap, Nuclei, ZAP, WhatWeb, FFUF y wafw00f.</p></article>
+        <article class="step"><strong>05</strong><span>Evidencia</span><p>Tarjetas PNG, evidencia browser y comandos manuales.</p></article>
+        <article class="step"><strong>06</strong><span>Reporte</span><p>TXT TITAN, JSON, Excel, dashboard y reporte formal.</p></article>
+      </div>
+    </section>
+
+    <section id="motores">
+      <div class="section-head">
+        <h2>Motores internos y externos</h2>
+        <p>La arquitectura separa validacion propia, reconocimiento y herramientas externas para evitar reportes inflados.</p>
+      </div>
+      <div class="grid">
+        <article class="card">
+          <h3>Motor Python asincrono</h3>
+          <p>Ejecuta modulos DAST con `aiohttp`, semaforos, jitter por payload y controles de pausa/reanudacion.</p>
+          <ul>
+            <li>SQLi, XSS, LFI, SSRF, SSTI y Command Injection.</li>
+            <li>Autenticacion, sesiones, JWT, IDOR y rutas sensibles.</li>
+            <li>Fuzzing de rutas y endpoints con soft-404 filtering.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Nmap y Nuclei</h3>
+          <p>Se ejecutan como procesos externos observables, sin limite duro por defecto, con heartbeat y salida parseada.</p>
+          <ul>
+            <li>Nmap NSE: vulnerabilidades seguras, TLS, Slowloris y Vulners.</li>
+            <li>Nuclei: perfiles general, conservador y CVE.</li>
+            <li>Puertos del target y puertos descubiertos entran en los perfiles.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>OWASP ZAP</h3>
+          <p>Integra acceso de semillas, spider, pasivo y activo con control de estado, filtrado de falsos positivos y export JSON.</p>
+          <ul>
+            <li>Sin reloj global cuando el timeout es `0`.</li>
+            <li>API local con autoarranque opcional del daemon.</li>
+            <li>Recon y alertas quedan separados.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="recon">
+      <div class="section-head">
+        <h2>Reconocimiento profesional</h2>
+        <p>La inteligencia de superficie se mantiene fuera del listado de vulnerabilidades para que el informe sea defendible.</p>
+      </div>
+      <div class="split">
+        <article class="card">
+          <h3>Recon Matrix</h3>
+          <p>Excel corporativo con tecnologias, puertos, endpoints, formularios, librerias, cookies, headers, WAF y rutas por wordlist.</p>
+        </article>
+        <table class="matrix" aria-label="Archivos de reconocimiento">
+          <thead><tr><th>Archivo</th><th>Uso</th></tr></thead>
+          <tbody>
+            <tr><td><code>Recon_Matrix.xlsx</code></td><td>Matriz filtrable por objetivo con artefactos pasivos y rutas detectadas.</td></tr>
+            <tr><td><code>Recon_Dashboard.html</code></td><td>Vista ejecutiva del inventario de superficie por objetivo.</td></tr>
+            <tr><td><code>Recon_Sitemap.html</code></td><td>Arbol tipo Burp/ZAP para desplegar rutas, endpoints y rutas SPA.</td></tr>
+            <tr><td><code>scan_titan_runtime.json</code></td><td>Estado vivo del pipeline, fases, herramientas y ultimos eventos.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="reportes">
+      <div class="section-head">
+        <h2>Reporteria y evidencia</h2>
+        <p>Los hallazgos se deduplican y se enriquecen con datos tecnicos para validacion manual y presentacion formal.</p>
+      </div>
+      <div class="grid">
+        <article class="card"><h3>TXT TITAN</h3><p>Formato diario con First Seen, Last Seen, evidencia, impacto, remediacion y comando manual.</p></article>
+        <article class="card"><h3>Dashboard diario</h3><p>HTML offline con estados activos, recurrentes, regresiones, filtros, prioridad y evidencia.</p></article>
+        <article class="card"><h3>Informe formal</h3><p>Portada, resumen ejecutivo, alcance, severidades, detalle de hallazgos y archivos generados.</p></article>
+      </div>
+    </section>
+
+    <section id="operacion">
+      <div class="section-head">
+        <h2>Operacion diaria</h2>
+        <p>Diseñado para ejecutarse durante una jornada completa y cerrar con resultados utilizables aunque se finalice antes.</p>
+      </div>
+      <table class="matrix" aria-label="Comandos de operacion">
+        <thead><tr><th>Accion</th><th>Comando o tecla</th><th>Resultado</th></tr></thead>
+        <tbody>
+          <tr><td>Escaneo normal</td><td><code>python main.py</code></td><td>Ejecuta pipeline completo con configuracion zero-touch.</td></tr>
+          <tr><td>Maxima cobertura</td><td><code>python main.py --full</code></td><td>Activa todos los perfiles, browser evidence, ZAP activo y wordlists completas.</td></tr>
+          <tr><td>Monitor live</td><td><code>python main.py --monitor</code></td><td>Abre panel de solo lectura con fase actual, progreso y herramientas.</td></tr>
+          <tr><td>Pausar</td><td><code>P</code></td><td>Detiene temporalmente el avance entre pruebas.</td></tr>
+          <tr><td>Reanudar</td><td><code>R</code></td><td>Continua la ejecucion.</td></tr>
+          <tr><td>Finalizar ordenado</td><td><code>F</code></td><td>Cierra procesos y genera reportes con lo encontrado.</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell">Scan Titan Community Edition. Auditoria automatizada, evidencia reproducible y reportes offline.</div>
+  </footer>
+</body>
+</html>
