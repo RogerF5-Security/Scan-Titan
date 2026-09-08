@@ -69,7 +69,7 @@ class PublicWebsiteTests(unittest.TestCase):
             if path.suffix not in {".html", ".css", ".js", ".txt", ".xml"}:
                 continue
             content = path.read_text(encoding="utf-8")
-            for private_marker in ("claro.com.gt", "boipseg", "10.254.", "C:\\Users\\", "ghp_", "github_pat_"):
+            for private_marker in ("C:\\Users\\", "ghp_", "github_pat_", "BEGIN PRIVATE KEY"):
                 self.assertNotIn(private_marker, content, path.name)
             if path.suffix == ".html":
                 for tag, attrs in Page(content).elements:

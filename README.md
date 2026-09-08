@@ -2,7 +2,7 @@
 
 Motor de auditoria automatizada en Python: reconocimiento, pruebas web, orquestacion de herramientas externas y reportes de vulnerabilidades. Preparacion de la edicion comunitaria para Pwn3d!.
 
-**Version del motor:** 21.3.1. **Estado:** preparacion privada; la publicacion se realizara el dia del evento.
+**Version del motor:** 21.3.1. **Estado:** repositorio publico. [Web de Scan Titan](https://rogerf5-security.github.io/Scan-Titan/).
 
 ## Inicio rapido
 
@@ -77,7 +77,7 @@ Los reportes, sesiones y evidencias permanecen locales y estan excluidos de Git.
 
 - [Manual completo](docs/README.md).
 - [Presentacion web](docs/web/index.html): proceso, motores, resultados y guia de uso en espanol.
-- [Publicacion en GitHub Pages](docs/WEB_PUBLICA.md): preparada en este mismo repositorio para `https://rogerf5-security.github.io/Scan-Titan/`. Activacion pendiente por la restriccion del plan actual para repositorios privados.
+- [Web publica](https://rogerf5-security.github.io/Scan-Titan/) y [mantenimiento de GitHub Pages](docs/WEB_PUBLICA.md), desde este mismo repositorio.
 - [Preparacion para el evento](docs/PUBLICACION.md).
 - [Licencia MIT](LICENSE).
 

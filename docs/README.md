@@ -210,6 +210,6 @@ La plantilla comunitaria excluye el exportador privado de detalle tecnico. Las s
 
 ## Presentacion Web
 
-La presentacion explica el proceso de auditoria, los motores, los reportes y la operacion en Windows y Linux. Los ejemplos son ficticios y no ejecutan escaneos. Su direccion prevista es `https://rogerf5-security.github.io/Scan-Titan/`; la activacion de Pages esta pendiente de un plan compatible con el repositorio privado o de la publicacion autorizada del repositorio.
+La presentacion esta en [rogerf5-security.github.io/Scan-Titan](https://rogerf5-security.github.io/Scan-Titan/). Explica el proceso de auditoria, los motores, los reportes y la operacion en Windows y Linux. Los ejemplos son ficticios y no ejecutan escaneos.
 
 La copia local es [web/index.html](web/index.html). Consulta [WEB_PUBLICA.md](WEB_PUBLICA.md) para publicar solo la presentacion desde el propio repositorio Scan-Titan, sin empaquetar el motor ni los datos locales.

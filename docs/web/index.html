@@ -783,16 +783,16 @@
               dependencias antes del primer escaneo.
             </p>
             <p class="release-note">
-              <strong>Publicación del código en preparación.</strong> El
-              repositorio del escáner permanece privado hasta su lanzamiento.
-              Estos pasos son para quienes ya disponen del proyecto.
+              <strong>Código disponible en GitHub.</strong> Descarga el proyecto,
+              revisa la configuración y prepara tus objetivos. Los reportes y las
+              credenciales de cada auditoría deben permanecer fuera de Git.
             </p>
             <a
               class="text-link"
-              href="https://github.com/RogerF5-Security"
+              href="https://github.com/RogerF5-Security/Scan-Titan"
               target="_blank"
               rel="noopener noreferrer"
-              >Seguir el proyecto de Roger F5
+              >Obtener Scan Titan
               <span aria-hidden="true">↗</span></a
             >
           </div>
@@ -840,7 +840,11 @@
               aria-labelledby="tab-windows"
               tabindex="0"
             >
-              <pre><code># Desde la carpeta del proyecto
+              <pre><code># Descargar el proyecto
+git clone https://github.com/RogerF5-Security/Scan-Titan.git
+cd Scan-Titan
+
+# Preparar el entorno
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 powershell -ExecutionPolicy Bypass -File .\install\install.ps1
@@ -856,7 +860,11 @@ python main.py</code></pre>
               tabindex="0"
               hidden
             >
-              <pre><code># Desde la carpeta del proyecto
+              <pre><code># Descargar el proyecto
+git clone https://github.com/RogerF5-Security/Scan-Titan.git
+cd Scan-Titan
+
+# Preparar el entorno
 python3 -m venv .venv
 source .venv/bin/activate
 bash install/install.sh

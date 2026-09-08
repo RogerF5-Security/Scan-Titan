@@ -1,7 +1,12 @@
 name: Publicar web de Scan Titan
 
-# Manual mientras se habilita Pages para este repositorio privado.
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/web/**'
+      - 'tests/test_web_presentation.py'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
