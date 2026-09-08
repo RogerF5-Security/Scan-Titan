@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://rogerf5-security.github.io/Scan-Titan/sitemap.xml

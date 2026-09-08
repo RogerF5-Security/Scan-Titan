@@ -207,3 +207,9 @@ Los instaladores actualizan dependencias Python y validan Nmap, Nuclei, WhatWeb,
 ## Politica de Reporte Publico
 
 La plantilla comunitaria excluye el exportador privado de detalle tecnico. Las salidas publicas son TXT, JSON, Excel de Recon y dashboards HTML con estilo operativo tipo Nessus, enfocados en hallazgos confirmados, confianza, fuerza de evidencia, riesgo de falso positivo, CWE, OWASP Top 10:2025, CVSS estimado y comando de validacion manual.
+
+## Presentacion Web
+
+La presentacion explica el proceso de auditoria, los motores, los reportes y la operacion en Windows y Linux. Los ejemplos son ficticios y no ejecutan escaneos. Su direccion prevista es `https://rogerf5-security.github.io/Scan-Titan/`; la activacion de Pages esta pendiente de un plan compatible con el repositorio privado o de la publicacion autorizada del repositorio.
+
+La copia local es [web/index.html](web/index.html). Consulta [WEB_PUBLICA.md](WEB_PUBLICA.md) para publicar solo la presentacion desde el propio repositorio Scan-Titan, sin empaquetar el motor ni los datos locales.

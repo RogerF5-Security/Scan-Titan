@@ -76,7 +76,8 @@ Los reportes, sesiones y evidencias permanecen locales y estan excluidos de Git.
 ## Documentacion y desarrollo
 
 - [Manual completo](docs/README.md).
-- [Presentacion web local](docs/web/index.html): abre el archivo en tu navegador.
+- [Presentacion web](docs/web/index.html): proceso, motores, resultados y guia de uso en espanol.
+- [Publicacion en GitHub Pages](docs/WEB_PUBLICA.md): preparada en este mismo repositorio para `https://rogerf5-security.github.io/Scan-Titan/`. Activacion pendiente por la restriccion del plan actual para repositorios privados.
 - [Preparacion para el evento](docs/PUBLICACION.md).
 - [Licencia MIT](LICENSE).
 

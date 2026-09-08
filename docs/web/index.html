@@ -1,560 +1,992 @@
 <!doctype html>
 <html lang="es">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Scan Titan | Motor Zero-Touch de Auditoria</title>
-  <style>
-    :root {
-      color-scheme: dark;
-      --bg: #08090c;
-      --panel: #111318;
-      --panel-2: #171a21;
-      --line: #303541;
-      --text: #f4f7fb;
-      --muted: #a8b1bf;
-      --red: #ef3340;
-      --cyan: #33d6ff;
-      --green: #3ee37c;
-      --amber: #ffb020;
-      --violet: #a78bfa;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    html {
-      scroll-behavior: smooth;
-    }
-
-    body {
-      margin: 0;
-      background:
-        linear-gradient(135deg, rgba(239, 51, 64, 0.16), transparent 34%),
-        linear-gradient(225deg, rgba(51, 214, 255, 0.12), transparent 32%),
-        var(--bg);
-      color: var(--text);
-      font: 15px/1.55 "Segoe UI", Arial, sans-serif;
-    }
-
-    a {
-      color: inherit;
-      text-decoration: none;
-    }
-
-    code {
-      color: #d9f6ff;
-      font-family: Consolas, "Cascadia Mono", monospace;
-    }
-
-    .shell {
-      width: min(1180px, calc(100% - 32px));
-      margin: 0 auto;
-    }
-
-    .topbar {
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(8, 9, 12, 0.88);
-      backdrop-filter: blur(16px);
-    }
-
-    .nav {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 18px;
-      min-height: 68px;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-weight: 900;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-
-    .mark {
-      display: grid;
-      width: 38px;
-      height: 38px;
-      place-items: center;
-      border: 1px solid var(--red);
-      background: #1a0d10;
-      color: var(--red);
-      font-weight: 950;
-    }
-
-    .links {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      justify-content: flex-end;
-    }
-
-    .links a {
-      padding: 8px 10px;
-      border: 1px solid transparent;
-      border-radius: 8px;
-      color: var(--muted);
-      font-weight: 700;
-      font-size: 13px;
-    }
-
-    .links a:hover {
-      border-color: var(--line);
-      color: var(--text);
-      background: rgba(255, 255, 255, 0.05);
-    }
-
-    .hero {
-      display: grid;
-      grid-template-columns: minmax(0, 1.03fr) minmax(360px, 0.97fr);
-      gap: 30px;
-      align-items: center;
-      min-height: calc(100vh - 68px);
-      padding: 54px 0 44px;
-    }
-
-    .eyebrow {
-      color: var(--cyan);
-      font-size: 12px;
-      font-weight: 900;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
-    }
-
-    h1,
-    h2,
-    h3 {
-      margin: 0;
-      line-height: 1.08;
-    }
-
-    h1 {
-      margin-top: 12px;
-      font-size: clamp(44px, 7vw, 84px);
-      letter-spacing: 0;
-      text-transform: uppercase;
-    }
-
-    .subtitle {
-      max-width: 680px;
-      margin: 18px 0 0;
-      color: #d4dbe6;
-      font-size: 19px;
-    }
-
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-top: 28px;
-    }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 44px;
-      padding: 0 16px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel-2);
-      color: var(--text);
-      font-weight: 900;
-    }
-
-    .btn.primary {
-      border-color: #ff5360;
-      background: var(--red);
-      color: white;
-    }
-
-    .terminal {
-      border: 1px solid #3b414d;
-      border-radius: 10px;
-      overflow: hidden;
-      background: #050608;
-      box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
-    }
-
-    .terminal-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 12px;
-      border-bottom: 1px solid #292e38;
-      background: #151820;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 800;
-    }
-
-    .lights {
-      display: flex;
-      gap: 7px;
-    }
-
-    .lights span {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--red);
-    }
-
-    .lights span:nth-child(2) {
-      background: var(--amber);
-    }
-
-    .lights span:nth-child(3) {
-      background: var(--green);
-    }
-
-    .terminal pre {
-      margin: 0;
-      padding: 18px;
-      min-height: 390px;
-      color: #d9f6ff;
-      font: 13px/1.55 Consolas, "Cascadia Mono", monospace;
-      white-space: pre-wrap;
-    }
-
-    .wall {
-      display: grid;
-      grid-template-columns: repeat(10, 1fr);
-      gap: 4px;
-      margin: 22px 0 0;
-      max-width: 560px;
-    }
-
-    .wall span {
-      display: block;
-      height: 19px;
-      border: 1px solid #40363a;
-      background: #21191b;
-    }
-
-    .wall span:nth-child(8n),
-    .wall span:nth-child(13n),
-    .wall span:nth-child(22n) {
-      background: #431b22;
-      border-color: var(--red);
-      transform: rotate(-4deg) translateY(3px);
-    }
-
-    section {
-      padding: 42px 0;
-    }
-
-    .section-head {
-      display: flex;
-      align-items: end;
-      justify-content: space-between;
-      gap: 18px;
-      margin-bottom: 18px;
-    }
-
-    .section-head p {
-      max-width: 620px;
-      margin: 0;
-      color: var(--muted);
-    }
-
-    h2 {
-      font-size: clamp(28px, 4vw, 42px);
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 14px;
-    }
-
-    .card {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: rgba(17, 19, 24, 0.92);
-      padding: 18px;
-    }
-
-    .card h3 {
-      font-size: 18px;
-      margin-bottom: 9px;
-    }
-
-    .card p,
-    .card li {
-      color: var(--muted);
-    }
-
-    .card ul {
-      margin: 10px 0 0;
-      padding-left: 18px;
-    }
-
-    .flow {
-      display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    .step {
-      min-height: 140px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #111318;
-      padding: 14px;
-    }
-
-    .step strong {
-      display: block;
-      color: var(--cyan);
-      font-size: 12px;
-      text-transform: uppercase;
-    }
-
-    .step span {
-      display: block;
-      margin-top: 8px;
-      font-weight: 900;
-    }
-
-    .step p {
-      margin: 8px 0 0;
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .split {
-      display: grid;
-      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-      gap: 16px;
-    }
-
-    .matrix {
-      width: 100%;
-      border-collapse: collapse;
-      overflow: hidden;
-      border-radius: 8px;
-    }
-
-    .matrix th,
-    .matrix td {
-      padding: 12px;
-      border: 1px solid #323844;
-      text-align: left;
-      vertical-align: top;
-    }
-
-    .matrix th {
-      background: #222832;
-      color: #ffffff;
-      text-transform: uppercase;
-      font-size: 11px;
-      letter-spacing: 0.12em;
-    }
-
-    .matrix td {
-      background: rgba(17, 19, 24, 0.92);
-      color: var(--muted);
-    }
-
-    .footer {
-      border-top: 1px solid var(--line);
-      padding: 30px 0;
-      color: var(--muted);
-    }
-
-    @media (max-width: 980px) {
-      .hero,
-      .split {
-        grid-template-columns: 1fr;
-      }
-
-      .grid,
-      .flow {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-    }
-
-    @media (max-width: 640px) {
-      .nav,
-      .section-head {
-        align-items: flex-start;
-        flex-direction: column;
-      }
-
-      .grid,
-      .flow {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
-</head>
-<body>
-  <header class="topbar">
-    <nav class="shell nav" aria-label="Navegacion principal">
-      <a class="brand" href="#inicio"><span class="mark">ST</span><span>Scan Titan</span></a>
-      <div class="links">
-        <a href="#flujo">Flujo</a>
-        <a href="#motores">Motores</a>
-        <a href="#recon">Recon</a>
-        <a href="#reportes">Reportes</a>
-        <a href="#operacion">Operacion</a>
-      </div>
-    </nav>
-  </header>
-
-  <main id="inicio" class="shell">
-    <section class="hero">
-      <div>
-        <div class="eyebrow">Zero-Touch | Recon | DAST | Evidencia</div>
-        <h1>Scan Titan</h1>
-        <p class="subtitle">
-          Motor de auditoria automatizada creado para ejecutar reconocimiento, validacion de vulnerabilidades,
-          orquestacion externa y reporteria profesional con una sola orden.
-        </p>
-        <div class="actions">
-          <a class="btn primary" href="#flujo">Ver proceso interno</a>
-          <a class="btn" href="../README.md">Abrir guia tecnica</a>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#131414" />
+    <meta
+      name="description"
+      content="Scan Titan conecta reconocimiento, pruebas de seguridad y evidencia en un flujo de auditoría automatizado. Creado por Roger Arana para Windows y Linux."
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="es_ES" />
+    <meta
+      property="og:title"
+      content="Scan Titan | De la superficie a la evidencia"
+    />
+    <meta
+      property="og:description"
+      content="Reconocimiento, auditoría web y reportes en un solo flujo zero-touch. Windows + Linux."
+    />
+    <meta property="og:url" content="https://rogerf5-security.github.io/Scan-Titan/" />
+    <meta
+      property="og:image"
+      content="https://rogerf5-security.github.io/Scan-Titan/media/scan-titan-social.png"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="canonical" href="https://rogerf5-security.github.io/Scan-Titan/" />
+    <link rel="icon" href="media/favicon.png" type="image/png" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preload" href="media/terminal.png" as="image" />
+    <script src="app.js" defer></script>
+    <title>Scan Titan | Auditoría automatizada con evidencia</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#contenido">Saltar al contenido</a>
+    <header class="header">
+      <nav class="container nav" aria-label="Navegación principal">
+        <a href="#inicio" class="brand" aria-label="Scan Titan, inicio"
+          ><span class="brand-mark" aria-hidden="true">ST<span>_</span></span
+          ><span>SCAN TITAN</span></a
+        >
+        <button
+          class="menu-toggle icon-button"
+          type="button"
+          aria-label="Abrir navegación"
+          aria-expanded="false"
+          aria-controls="nav-links"
+        >
+          <img src="icons/menu.svg" alt="" width="22" height="22" />
+        </button>
+        <div id="nav-links" class="nav-links">
+          <a href="#proceso">El proceso</a><a href="#motores">Motores</a
+          ><a href="#resultados">Resultados</a
+          ><a href="#comenzar">Guía de uso</a>
+          <a
+            class="repo-link"
+            href="https://github.com/RogerF5-Security/Scan-Titan"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Repositorio
+            <img src="icons/arrow-up-right.svg" alt="" width="17" height="17"
+          /></a>
         </div>
-        <div class="wall" aria-hidden="true">
-          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </nav>
+    </header>
+    <main id="contenido">
+      <section id="inicio" class="hero" aria-labelledby="hero-title">
+        <img
+          class="hero-image"
+          src="media/terminal.png"
+          width="1800"
+          height="850"
+          alt="Ejemplo ficticio del flujo de consola de Scan Titan: reconocimiento, comprobaciones y generación de evidencia"
+          fetchpriority="high"
+        />
+        <div class="container hero-inner">
+          <div class="hero-top">
+            <span class="micro"
+              ><span class="status-dot"></span> Ingeniería de auditoría ·
+              Edición comunitaria</span
+            ><span class="hero-build">PYTHON / WINDOWS + LINUX</span>
+          </div>
+          <div class="hero-copy">
+            <p class="eyebrow">RECONOCER. VALIDAR. DOCUMENTAR.</p>
+            <h1 id="hero-title">
+              SCAN<br /><span>TITAN<span class="title-stop">.</span></span>
+            </h1>
+            <p class="hero-subtitle">De la superficie<br />a la evidencia.</p>
+            <p class="hero-description">
+              Una sola ejecución. Reconocimiento, pruebas web y herramientas
+              especializadas conectadas en un flujo de auditoría trazable.
+            </p>
+            <div class="actions">
+              <a class="button button-red" href="#proceso"
+                >Explorar el motor
+                <img
+                  src="icons/arrow-right.svg"
+                  width="18"
+                  height="18"
+                  alt="" /></a
+              ><a class="text-link" href="#resultados"
+                >Ver los resultados <span aria-hidden="true">↗</span></a
+              >
+            </div>
+          </div>
+          <div class="hero-bottom">
+            <span>CREADO POR ROGER ARANA / ROGER F5</span
+            ><span
+              >Zero-touch en ejecución. Criterio humano en la validación.</span
+            >
+          </div>
+        </div>
+      </section>
+      <section class="engine-strip" aria-label="Integraciones del proyecto">
+        <div class="container strip-inner">
+          <span class="strip-label">UN FLUJO.<br />VARIOS MOTORES.</span>
+          <div class="engine-names">
+            <span>Nmap</span><span>Nuclei</span><span>OWASP ZAP</span
+            ><span>WhatWeb</span><span>Playwright</span>
+          </div>
+        </div>
+      </section>
+      <section id="proceso" class="section section-light">
+        <div class="container">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">01 / ARQUITECTURA</p>
+              <h2>
+                No es lanzar herramientas.<br />Es conectar sus resultados.
+              </h2>
+            </div>
+            <p>
+              Scan Titan organiza cada etapa de la auditoría. Los datos de
+              superficie alimentan las pruebas; los hallazgos conservan su
+              origen, evidencia y contexto.
+            </p>
+          </div>
+          <div class="pipeline" aria-label="Etapas de la auditoría">
+            <article>
+              <span class="step-number">01</span>
+              <h3>Definir</h3>
+              <p>
+                Objetivos y política de ejecución desde archivos locales.
+                Perfiles y límites explícitos.
+              </p>
+              <code>targets + config</code>
+            </article>
+            <article>
+              <span class="step-number">02</span>
+              <h3>Descubrir</h3>
+              <p>
+                Tecnologías, puertos, rutas y APIs. El reconocimiento construye
+                el inventario del objetivo.
+              </p>
+              <code>superficie + contexto</code>
+            </article>
+            <article>
+              <span class="step-number">03</span>
+              <h3>Comprobar</h3>
+              <p>
+                Módulos web y motores externos. Pruebas acotadas y contraste de
+                respuestas para reducir ruido.
+              </p>
+              <code>DAST + integraciones</code>
+            </article>
+            <article>
+              <span class="step-number">04</span>
+              <h3>Documentar</h3>
+              <p>
+                Deduplicación, evidencia y comandos de validación. Informes
+                separados del reconocimiento.
+              </p>
+              <code>hallazgos + reportes</code>
+            </article>
+          </div>
+          <div class="architecture-note">
+            <img src="icons/activity.svg" alt="" width="20" height="20" />
+            <p>
+              <strong>La actividad debe ser verificable.</strong> Peticiones
+              completadas, activas y en espera; tiempos de respuesta y estado de
+              las herramientas. Encolar una prueba no equivale a terminarla.
+            </p>
+          </div>
+        </div>
+      </section>
+      <section id="motores" class="section section-dark">
+        <div class="container">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">02 / MOTORES</p>
+              <h2>Especializados por separado.<br />Coordinados por Titan.</h2>
+            </div>
+            <p>
+              El motor Python y las integraciones tienen responsabilidades
+              distintas. Su disponibilidad y el perfil seleccionado determinan
+              qué pruebas se ejecutan.
+            </p>
+          </div>
+          <div class="engine-workspace">
+            <div
+              class="engine-tabs"
+              role="tablist"
+              aria-label="Motores de auditoría"
+              aria-orientation="vertical"
+            >
+              <button
+                id="tab-python"
+                type="button"
+                role="tab"
+                aria-selected="true"
+                aria-controls="panel-python"
+                data-engine="python"
+              >
+                <span>01</span> Python / DAST
+                <img
+                  src="icons/arrow-right.svg"
+                  alt=""
+                  width="18"
+                  height="18"
+                />
+              </button>
+              <button
+                id="tab-nmap"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="panel-nmap"
+                tabindex="-1"
+                data-engine="nmap"
+              >
+                <span>02</span> Nmap
+                <img
+                  src="icons/arrow-right.svg"
+                  alt=""
+                  width="18"
+                  height="18"
+                />
+              </button>
+              <button
+                id="tab-nuclei"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="panel-nuclei"
+                tabindex="-1"
+                data-engine="nuclei"
+              >
+                <span>03</span> Nuclei
+                <img
+                  src="icons/arrow-right.svg"
+                  alt=""
+                  width="18"
+                  height="18"
+                />
+              </button>
+              <button
+                id="tab-zap"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="panel-zap"
+                tabindex="-1"
+                data-engine="zap"
+              >
+                <span>04</span> OWASP ZAP
+                <img
+                  src="icons/arrow-right.svg"
+                  alt=""
+                  width="18"
+                  height="18"
+                />
+              </button>
+              <button
+                id="tab-recon"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="panel-recon"
+                tabindex="-1"
+                data-engine="recon"
+              >
+                <span>05</span> Recon + navegador
+                <img
+                  src="icons/arrow-right.svg"
+                  alt=""
+                  width="18"
+                  height="18"
+                />
+              </button>
+            </div>
+            <div class="engine-panels">
+              <article
+                id="panel-python"
+                role="tabpanel"
+                aria-labelledby="tab-python"
+                tabindex="0"
+              >
+                <span class="label">MOTOR NATIVO</span>
+                <h3>Pruebas con contexto.<br />Concurrencia bajo control.</h3>
+                <p>
+                  <code>asyncio</code> y <code>aiohttp</code> coordinan los
+                  módulos HTTP. Grupos de trabajo acotados, esperas entre
+                  peticiones y límites por solicitud permiten avanzar sin crear
+                  miles de conexiones simultáneas.
+                </p>
+                <ul class="feature-list">
+                  <li>
+                    SQLi, XSS, LFI, SSRF, SSTI y otras comprobaciones web.
+                  </li>
+                  <li>
+                    Sesiones, autenticación, autorización, cabeceras y TLS.
+                  </li>
+                  <li>
+                    Diccionarios por tipo de prueba y filtrado de respuestas
+                    soft-404.
+                  </li>
+                </ul>
+                <dl class="engine-facts">
+                  <div>
+                    <dt>Entrada</dt>
+                    <dd>Objetivos, rutas y política</dd>
+                  </div>
+                  <div>
+                    <dt>Salida</dt>
+                    <dd>Evidencia estructurada</dd>
+                  </div>
+                </dl>
+              </article>
+              <article
+                id="panel-nmap"
+                role="tabpanel"
+                aria-labelledby="tab-nmap"
+                tabindex="0"
+                hidden
+              >
+                <span class="label">INFRAESTRUCTURA</span>
+                <h3>La superficie de red<br />también importa.</h3>
+                <p>
+                  Nmap identifica puertos y servicios. Sus perfiles NSE aportan
+                  comprobaciones específicas; la salida XML se transforma en
+                  reconocimiento y hallazgos con el nombre del script que los
+                  originó.
+                </p>
+                <ul class="feature-list">
+                  <li>Enumeración de servicios y revisión de TLS.</li>
+                  <li>
+                    Comprobaciones NSE y correlación con Vulners según el
+                    perfil.
+                  </li>
+                  <li>
+                    Una versión o un resultado “probablemente vulnerable” no
+                    prueban explotación.
+                  </li>
+                </ul>
+                <dl class="engine-facts">
+                  <div>
+                    <dt>Entrada</dt>
+                    <dd>Hosts y puertos del alcance</dd>
+                  </div>
+                  <div>
+                    <dt>Salida</dt>
+                    <dd>XML, servicios y resultados NSE</dd>
+                  </div>
+                </dl>
+              </article>
+              <article
+                id="panel-nuclei"
+                role="tabpanel"
+                aria-labelledby="tab-nuclei"
+                tabindex="0"
+                hidden
+              >
+                <span class="label">COMPROBACIONES POR PLANTILLA</span>
+                <h3>Cobertura reproducible.<br />Origen identificable.</h3>
+                <p>
+                  Nuclei ejecuta las plantillas disponibles con perfiles de
+                  cobertura y límites de carga. Titan incorpora los resultados
+                  JSON y mantiene el identificador de la plantilla para su
+                  revisión.
+                </p>
+                <ul class="feature-list">
+                  <li>Perfiles generales, conservadores y centrados en CVE.</li>
+                  <li>Hallazgos incorporados a la deduplicación común.</li>
+                  <li>
+                    Comando, duración, código de salida y diagnóstico de
+                    resultados vacíos.
+                  </li>
+                </ul>
+                <dl class="engine-facts">
+                  <div>
+                    <dt>Entrada</dt>
+                    <dd>Objetivos y plantillas instaladas</dd>
+                  </div>
+                  <div>
+                    <dt>Salida</dt>
+                    <dd>JSON con plantilla y evidencia</dd>
+                  </div>
+                </dl>
+              </article>
+              <article
+                id="panel-zap"
+                role="tabpanel"
+                aria-labelledby="tab-zap"
+                tabindex="0"
+                hidden
+              >
+                <span class="label">AUDITORÍA WEB</span>
+                <h3>Explorar, observar<br />y validar.</h3>
+                <p>
+                  La API local de OWASP ZAP recibe rutas válidas, coordina la
+                  exploración y recupera alertas. El modo de la política
+                  selecciona el análisis pasivo o las pruebas activas.
+                </p>
+                <ul class="feature-list">
+                  <li>
+                    Semillas filtradas para evitar patrones y URLs malformadas.
+                  </li>
+                  <li>
+                    Seguimiento de la exploración y del estado del análisis.
+                  </li>
+                  <li>
+                    Alertas con riesgo, confianza y referencia al complemento.
+                  </li>
+                </ul>
+                <dl class="engine-facts">
+                  <div>
+                    <dt>Entrada</dt>
+                    <dd>URLs válidas dentro del alcance</dd>
+                  </div>
+                  <div>
+                    <dt>Salida</dt>
+                    <dd>Alertas y superficie descubierta</dd>
+                  </div>
+                </dl>
+              </article>
+              <article
+                id="panel-recon"
+                role="tabpanel"
+                aria-labelledby="tab-recon"
+                tabindex="0"
+                hidden
+              >
+                <span class="label">CONTEXTO DE APLICACIÓN</span>
+                <h3>Lo que sirve el servidor.<br />Lo que ve el navegador.</h3>
+                <p>
+                  WhatWeb y wafw00f complementan la identificación de
+                  tecnologías y WAF. ffuf y subfinder amplían el reconocimiento
+                  cuando están disponibles. Playwright aporta exploración SPA y
+                  evidencia visual opcional.
+                </p>
+                <ul class="feature-list">
+                  <li>Inventario organizado por objetivo, puerto y ruta.</li>
+                  <li>Rutas, formularios, bibliotecas, cabeceras y cookies.</li>
+                  <li>
+                    Una captura documenta el estado observado; no confirma por
+                    sí sola una vulnerabilidad.
+                  </li>
+                </ul>
+                <dl class="engine-facts">
+                  <div>
+                    <dt>Entrada</dt>
+                    <dd>Alcance y configuración de navegador</dd>
+                  </div>
+                  <div>
+                    <dt>Salida</dt>
+                    <dd>Mapa del sitio y artefactos</dd>
+                  </div>
+                </dl>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section id="resultados" class="section section-light">
+        <div class="container">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">03 / RESULTADOS</p>
+              <h2>Menos ruido.<br />Más contexto para decidir.</h2>
+            </div>
+            <p>
+              El reconocimiento no es una vulnerabilidad. Los inventarios, los
+              hallazgos y el estado de las herramientas se presentan por
+              separado.
+            </p>
+          </div>
+          <div class="demo-heading">
+            <div
+              class="result-tabs"
+              role="tablist"
+              aria-label="Ejemplos de resultados"
+            >
+              <button
+                role="tab"
+                type="button"
+                id="tab-sitemap"
+                aria-controls="panel-sitemap"
+                aria-selected="true"
+                data-result="sitemap"
+              >
+                Mapa del sitio</button
+              ><button
+                role="tab"
+                type="button"
+                id="tab-finding"
+                aria-controls="panel-finding"
+                aria-selected="false"
+                tabindex="-1"
+                data-result="finding"
+              >
+                Evidencia</button
+              ><button
+                role="tab"
+                type="button"
+                id="tab-deliverables"
+                aria-controls="panel-deliverables"
+                aria-selected="false"
+                tabindex="-1"
+                data-result="deliverables"
+              >
+                Reportes
+              </button>
+            </div>
+            <span class="demo-label"
+              >EJEMPLO ILUSTRATIVO · DATOS FICTICIOS</span
+            >
+          </div>
+          <div
+            class="result-panel"
+            id="panel-sitemap"
+            role="tabpanel"
+            aria-labelledby="tab-sitemap"
+            tabindex="0"
+          >
+            <div class="sitemap-layout">
+              <div class="sitemap-tree">
+                <div class="tree-host">
+                  <img
+                    src="icons/network.svg"
+                    alt=""
+                    width="20"
+                    height="20"
+                  /><strong>laboratorio.example</strong><span>HTTPS</span>
+                </div>
+                <details open>
+                  <summary>
+                    <img src="icons/folder.svg" alt="" width="17" height="17" />
+                    / <span class="status-code">200</span>
+                  </summary>
+                  <div class="tree-children">
+                    <details open>
+                      <summary>
+                        <img
+                          src="icons/folder.svg"
+                          alt=""
+                          width="17"
+                          height="17"
+                        />
+                        api/
+                      </summary>
+                      <div class="tree-children">
+                        <div class="tree-leaf">
+                          <code>GET</code><span>productos</span
+                          ><span class="status-code">200</span>
+                        </div>
+                        <div class="tree-leaf">
+                          <code>GET</code><span>perfil</span
+                          ><span class="status-code code-locked">401</span>
+                        </div>
+                      </div>
+                    </details>
+                    <details open>
+                      <summary>
+                        <img
+                          src="icons/folder.svg"
+                          alt=""
+                          width="17"
+                          height="17"
+                        />
+                        cuenta/
+                      </summary>
+                      <div class="tree-children">
+                        <div class="tree-leaf">
+                          <code>GET</code><span>login</span
+                          ><span class="status-code">200</span>
+                        </div>
+                      </div>
+                    </details>
+                    <details>
+                      <summary>
+                        <img
+                          src="icons/folder.svg"
+                          alt=""
+                          width="17"
+                          height="17"
+                        />
+                        static/
+                      </summary>
+                      <div class="tree-children">
+                        <div class="tree-leaf">
+                          <code>GET</code><span>app.js</span
+                          ><span class="status-code">200</span>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                </details>
+              </div>
+              <div class="recon-detail">
+                <span class="label">RECONOCIMIENTO / OBJETIVO</span>
+                <h3>Cada ruta en su lugar.</h3>
+                <dl class="recon-fields">
+                  <div>
+                    <dt>Tecnología</dt>
+                    <dd>Python · nginx</dd>
+                  </div>
+                  <div>
+                    <dt>Servicios</dt>
+                    <dd>443/tcp · HTTPS</dd>
+                  </div>
+                  <div>
+                    <dt>Acceso</dt>
+                    <dd>/api/perfil requiere autenticación</dd>
+                  </div>
+                  <div>
+                    <dt>Origen</dt>
+                    <dd>Exploración HTTP + navegador</dd>
+                  </div>
+                </dl>
+                <p class="note">
+                  Un código 200 no basta: las redirecciones al inicio de sesión
+                  y las páginas de error personalizadas deben contrastarse.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div
+            class="result-panel"
+            id="panel-finding"
+            role="tabpanel"
+            aria-labelledby="tab-finding"
+            tabindex="0"
+            hidden
+          >
+            <div class="finding-layout">
+              <div class="finding-example">
+                <div class="finding-meta">
+                  <span class="severity">OBSERVACIÓN DE CONFIGURACIÓN</span
+                  ><span>STV-EJEMPLO-001</span>
+                </div>
+                <h3>HSTS no observado</h3>
+                <p class="finding-url">https://laboratorio.example/</p>
+                <dl class="finding-fields">
+                  <div>
+                    <dt>Prueba</dt>
+                    <dd>GET / · HTTP 200</dd>
+                  </div>
+                  <div>
+                    <dt>Evidencia</dt>
+                    <dd>
+                      La respuesta HTTPS no incluye Strict-Transport-Security.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Confianza</dt>
+                    <dd>Alta sobre la ausencia de la cabecera</dd>
+                  </div>
+                  <div>
+                    <dt>Recomendación</dt>
+                    <dd>
+                      Evaluar cobertura HTTPS antes de desplegar una política
+                      HSTS.
+                    </dd>
+                  </div>
+                </dl>
+                <div class="code-line">
+                  <code
+                    >curl -sS -D - -o /dev/null
+                    https://laboratorio.example/</code
+                  >
+                </div>
+              </div>
+              <div class="finding-context">
+                <span class="label">EVIDENCIA ANTES QUE ETIQUETAS</span>
+                <h3>Un hallazgo debe<br />poder revisarse.</h3>
+                <p>
+                  Origen de la detección, petición, respuesta relevante y
+                  validación manual. La confianza y el riesgo de falso positivo
+                  acompañan al resultado.
+                </p>
+                <p>
+                  La deduplicación conserva la primera y la última detección.
+                  Las capturas del navegador se añaden cuando la prueba y el
+                  entorno lo permiten.
+                </p>
+                <p class="note">
+                  Este ejemplo explica una observación de cabeceras. No
+                  demuestra un ataque ni representa un escaneo real.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div
+            class="result-panel"
+            id="panel-deliverables"
+            role="tabpanel"
+            aria-labelledby="tab-deliverables"
+            tabindex="0"
+            hidden
+          >
+            <div class="deliverable-table">
+              <table>
+                <caption>
+                  Archivos locales generados por Scan Titan
+                </caption>
+                <thead>
+                  <tr>
+                    <th>Archivo</th>
+                    <th>Contenido</th>
+                    <th>Uso</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Daily_vulns_report.html</td>
+                    <td>Hallazgos, estados y filtros</td>
+                    <td>Revisión diaria</td>
+                  </tr>
+                  <tr>
+                    <td>Formal_Audit_Report_Latest.html</td>
+                    <td>Portada, alcance y detalle</td>
+                    <td>Presentación del informe</td>
+                  </tr>
+                  <tr>
+                    <td>Recon_Matrix.xlsx</td>
+                    <td>Inventario y rutas por objetivo</td>
+                    <td>Análisis y filtrado</td>
+                  </tr>
+                  <tr>
+                    <td>Recon_Sitemap.html</td>
+                    <td>Árbol navegable de endpoints</td>
+                    <td>Exploración de superficie</td>
+                  </tr>
+                  <tr>
+                    <td>External_Tools_Observability.html</td>
+                    <td>Comandos, tiempos y salidas</td>
+                    <td>Diagnóstico de motores</td>
+                  </tr>
+                  <tr>
+                    <td>TXT / JSON / PNG</td>
+                    <td>Hallazgos y artefactos de evidencia</td>
+                    <td>Trazabilidad</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="report-footnote">
+            <img
+              src="icons/shield-check.svg"
+              alt=""
+              width="19"
+              height="19"
+            /><span
+              >Tus resultados permanecen en archivos locales. Esta web no recibe
+              objetivos, ejecuta escaneos ni recopila datos de auditoría.</span
+            >
+          </div>
+        </div>
+      </section>
+      <section id="comenzar" class="section section-start">
+        <div class="container start-layout">
+          <div class="start-copy">
+            <p class="eyebrow">04 / OPERACIÓN</p>
+            <h2>Preparar una vez.<br />Ejecutar con una orden.</h2>
+            <p>
+              Python 3.11 o posterior. Configura el alcance y comprueba las
+              dependencias antes del primer escaneo.
+            </p>
+            <p class="release-note">
+              <strong>Publicación del código en preparación.</strong> El
+              repositorio del escáner permanece privado hasta su lanzamiento.
+              Estos pasos son para quienes ya disponen del proyecto.
+            </p>
+            <a
+              class="text-link"
+              href="https://github.com/RogerF5-Security"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Seguir el proyecto de Roger F5
+              <span aria-hidden="true">↗</span></a
+            >
+          </div>
+          <div class="setup-panel">
+            <div class="setup-bar">
+              <div
+                class="os-tabs"
+                role="tablist"
+                aria-label="Sistema operativo"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  id="tab-windows"
+                  data-os="windows"
+                  aria-controls="panel-windows"
+                  aria-selected="true"
+                >
+                  Windows</button
+                ><button
+                  type="button"
+                  role="tab"
+                  id="tab-linux"
+                  data-os="linux"
+                  aria-controls="panel-linux"
+                  aria-selected="false"
+                  tabindex="-1"
+                >
+                  Linux
+                </button>
+              </div>
+              <button
+                id="copy-command"
+                class="icon-button"
+                type="button"
+                aria-label="Copiar comandos"
+                title="Copiar comandos"
+              >
+                <img src="icons/copy.svg" width="19" height="19" alt="" />
+              </button>
+            </div>
+            <div
+              role="tabpanel"
+              id="panel-windows"
+              aria-labelledby="tab-windows"
+              tabindex="0"
+            >
+              <pre><code># Desde la carpeta del proyecto
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+powershell -ExecutionPolicy Bypass -File .\install\install.ps1
+
+# Tras definir los objetivos y la política
+python main.py --health-check
+python main.py</code></pre>
+            </div>
+            <div
+              role="tabpanel"
+              id="panel-linux"
+              aria-labelledby="tab-linux"
+              tabindex="0"
+              hidden
+            >
+              <pre><code># Desde la carpeta del proyecto
+python3 -m venv .venv
+source .venv/bin/activate
+bash install/install.sh
+
+# Tras definir los objetivos y la política
+python main.py --health-check
+python main.py</code></pre>
+            </div>
+            <div class="setup-paths">
+              <span
+                ><strong>Alcance</strong><code>targets/targets.txt</code></span
+              ><span
+                ><strong>Política</strong><code>config/config.yaml</code></span
+              >
+            </div>
+            <p class="setup-note">
+              El instalador puede solicitar permisos del sistema. El escaneo
+              configurado se ejecuta sin confirmaciones interactivas.
+            </p>
+            <p
+              id="copy-status"
+              class="copy-status"
+              role="status"
+              aria-live="polite"
+            ></p>
+          </div>
+        </div>
+        <div class="container operation-grid">
+          <div>
+            <span class="operation-label">MÁS COBERTURA</span
+            ><code>python main.py --full</code>
+            <p>
+              Amplía el perfil y los diccionarios. Revisa alcance, efectos y
+              duración antes de ejecutarlo.
+            </p>
+          </div>
+          <div>
+            <span class="operation-label">SEGUIMIENTO</span
+            ><code>python main.py --monitor</code>
+            <p>
+              Consulta el estado local de la ejecución. Los datos sin actualizar
+              no equivalen a progreso vivo.
+            </p>
+          </div>
+          <div>
+            <span class="operation-label">CONTROL EN WINDOWS</span>
+            <div class="key-row">
+              <kbd>P</kbd> pausa <kbd>R</kbd> reanuda <kbd>F</kbd> finaliza
+            </div>
+            <p>
+              Finaliza de forma ordenada para generar reportes parciales. Ctrl+C
+              interrumpe.
+            </p>
+          </div>
+        </div>
+      </section>
+      <section class="section section-light faq-section">
+        <div class="container faq-layout">
+          <div>
+            <p class="eyebrow">CRITERIO TÉCNICO</p>
+            <h2>Automatizar no significa<br />asumir.</h2>
+          </div>
+          <div class="faq-list">
+            <details>
+              <summary>¿Detecta todas las vulnerabilidades?</summary>
+              <p>
+                No. La cobertura depende del alcance, el acceso disponible, las
+                tecnologías y las pruebas habilitadas. Los hallazgos requieren
+                revisión de evidencia; el escáner complementa el criterio del
+                auditor.
+              </p>
+            </details>
+            <details>
+              <summary>¿Qué necesita el modo zero-touch?</summary>
+              <p>
+                Objetivos definidos, configuración revisada y dependencias
+                disponibles. Los perfiles de autenticación, el navegador y las
+                herramientas externas requieren su propia preparación.
+                Zero-touch describe la ejecución del escaneo, no la ausencia de
+                configuración.
+              </p>
+            </details>
+            <details>
+              <summary>¿Qué ocurre si una herramienta no responde?</summary>
+              <p>
+                La orquestación registra actividad, duración, errores y códigos
+                de salida. Los límites de las peticiones se mantienen aunque un
+                proceso externo permita duración global ilimitada. Un latido de
+                proceso no demuestra que todas sus pruebas estén avanzando.
+              </p>
+            </details>
+            <details>
+              <summary>¿Esta web contiene auditorías reales?</summary>
+              <p>
+                No. Las vistas son ejemplos ficticios con dominios reservados.
+                Los reportes, las credenciales y los objetivos internos no
+                forman parte de esta publicación.
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+    </main>
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-top">
+          <a class="brand" href="#inicio"
+            ><span class="brand-mark" aria-hidden="true">ST<span>_</span></span
+            ><span>SCAN TITAN</span></a
+          >
+          <p>
+            Construido desde la práctica.<br />Preparado para compartir
+            conocimiento.
+          </p>
+          <a
+            class="text-link"
+            href="https://github.com/RogerF5-Security"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Roger F5 / GitHub <span aria-hidden="true">↗</span></a
+          >
+        </div>
+        <div class="footer-bottom">
+          <span>© 2026 Roger Arana · Scan Titan</span
+          ><span
+            >Sin analítica ni cookies propias ·
+            <a href="creditos.html">Créditos</a></span
+          ><a href="#inicio">Volver al inicio ↑</a>
         </div>
       </div>
-      <aside class="terminal" aria-label="Vista operacional de Scan Titan">
-        <div class="terminal-head">
-          <div class="lights"><span></span><span></span><span></span></div>
-          <span>main.py --full</span>
-        </div>
-        <pre>███████╗ ██████╗ █████╗ ███╗   ██╗
-SCAN TITAN :: WALL-BREACH VULNERABILITY ENGINE
-
-[+] Objetivos cargados desde targets/targets.txt
-[+] Wordlists activas: rutas, sqli, xss, lfi, ssrf, ssti
-[+] Nmap iniciado: perfiles NSE, TLS, Slowloris y Vulners
-[+] Nuclei iniciado: vulnerable, conservador y CVE
-[+] ZAP activo: spider, pasivo y validacion controlada
-[~] Heartbeat: proceso externo activo | sin limite
-[+] Recon_Sitemap.html actualizado por objetivo
-[+] Daily_vulns_report.html generado</pre>
-      </aside>
-    </section>
-
-    <section id="flujo">
-      <div class="section-head">
-        <h2>Flujo zero-touch</h2>
-        <p>El operador prepara objetivos autorizados y ejecuta el lanzador. El resto se encadena sin preguntas.</p>
-      </div>
-      <div class="flow">
-        <article class="step"><strong>01</strong><span>Entrada</span><p>Lectura sanitizada de objetivos y configuracion.</p></article>
-        <article class="step"><strong>02</strong><span>Recon</span><p>Tecnologias, rutas, headers, cookies, WAF y superficie.</p></article>
-        <article class="step"><strong>03</strong><span>DAST</span><p>Payloads context-aware con validacion antifalso positivo.</p></article>
-        <article class="step"><strong>04</strong><span>Externos</span><p>Nmap, Nuclei, ZAP, WhatWeb, FFUF y wafw00f.</p></article>
-        <article class="step"><strong>05</strong><span>Evidencia</span><p>Tarjetas PNG, evidencia browser y comandos manuales.</p></article>
-        <article class="step"><strong>06</strong><span>Reporte</span><p>TXT TITAN, JSON, Excel, dashboard y reporte formal.</p></article>
-      </div>
-    </section>
-
-    <section id="motores">
-      <div class="section-head">
-        <h2>Motores internos y externos</h2>
-        <p>La arquitectura separa validacion propia, reconocimiento y herramientas externas para evitar reportes inflados.</p>
-      </div>
-      <div class="grid">
-        <article class="card">
-          <h3>Motor Python asincrono</h3>
-          <p>Ejecuta modulos DAST con `aiohttp`, semaforos, jitter por payload y controles de pausa/reanudacion.</p>
-          <ul>
-            <li>SQLi, XSS, LFI, SSRF, SSTI y Command Injection.</li>
-            <li>Autenticacion, sesiones, JWT, IDOR y rutas sensibles.</li>
-            <li>Fuzzing de rutas y endpoints con soft-404 filtering.</li>
-          </ul>
-        </article>
-        <article class="card">
-          <h3>Nmap y Nuclei</h3>
-          <p>Se ejecutan como procesos externos observables, sin limite duro por defecto, con heartbeat y salida parseada.</p>
-          <ul>
-            <li>Nmap NSE: vulnerabilidades seguras, TLS, Slowloris y Vulners.</li>
-            <li>Nuclei: perfiles general, conservador y CVE.</li>
-            <li>Puertos del target y puertos descubiertos entran en los perfiles.</li>
-          </ul>
-        </article>
-        <article class="card">
-          <h3>OWASP ZAP</h3>
-          <p>Integra acceso de semillas, spider, pasivo y activo con control de estado, filtrado de falsos positivos y export JSON.</p>
-          <ul>
-            <li>Sin reloj global cuando el timeout es `0`.</li>
-            <li>API local con autoarranque opcional del daemon.</li>
-            <li>Recon y alertas quedan separados.</li>
-          </ul>
-        </article>
-      </div>
-    </section>
-
-    <section id="recon">
-      <div class="section-head">
-        <h2>Reconocimiento profesional</h2>
-        <p>La inteligencia de superficie se mantiene fuera del listado de vulnerabilidades para que el informe sea defendible.</p>
-      </div>
-      <div class="split">
-        <article class="card">
-          <h3>Recon Matrix</h3>
-          <p>Excel corporativo con tecnologias, puertos, endpoints, formularios, librerias, cookies, headers, WAF y rutas por wordlist.</p>
-        </article>
-        <table class="matrix" aria-label="Archivos de reconocimiento">
-          <thead><tr><th>Archivo</th><th>Uso</th></tr></thead>
-          <tbody>
-            <tr><td><code>Recon_Matrix.xlsx</code></td><td>Matriz filtrable por objetivo con artefactos pasivos y rutas detectadas.</td></tr>
-            <tr><td><code>Recon_Dashboard.html</code></td><td>Vista ejecutiva del inventario de superficie por objetivo.</td></tr>
-            <tr><td><code>Recon_Sitemap.html</code></td><td>Arbol tipo Burp/ZAP para desplegar rutas, endpoints y rutas SPA.</td></tr>
-            <tr><td><code>scan_titan_runtime.json</code></td><td>Estado vivo del pipeline, fases, herramientas y ultimos eventos.</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section id="reportes">
-      <div class="section-head">
-        <h2>Reporteria y evidencia</h2>
-        <p>Los hallazgos se deduplican y se enriquecen con datos tecnicos para validacion manual y presentacion formal.</p>
-      </div>
-      <div class="grid">
-        <article class="card"><h3>TXT TITAN</h3><p>Formato diario con First Seen, Last Seen, evidencia, impacto, remediacion y comando manual.</p></article>
-        <article class="card"><h3>Dashboard diario</h3><p>HTML offline con estados activos, recurrentes, regresiones, filtros, prioridad y evidencia.</p></article>
-        <article class="card"><h3>Informe formal</h3><p>Portada, resumen ejecutivo, alcance, severidades, detalle de hallazgos y archivos generados.</p></article>
-      </div>
-    </section>
-
-    <section id="operacion">
-      <div class="section-head">
-        <h2>Operacion diaria</h2>
-        <p>Diseñado para ejecutarse durante una jornada completa y cerrar con resultados utilizables aunque se finalice antes.</p>
-      </div>
-      <table class="matrix" aria-label="Comandos de operacion">
-        <thead><tr><th>Accion</th><th>Comando o tecla</th><th>Resultado</th></tr></thead>
-        <tbody>
-          <tr><td>Escaneo normal</td><td><code>python main.py</code></td><td>Ejecuta pipeline completo con configuracion zero-touch.</td></tr>
-          <tr><td>Maxima cobertura</td><td><code>python main.py --full</code></td><td>Activa todos los perfiles, browser evidence, ZAP activo y wordlists completas.</td></tr>
-          <tr><td>Monitor live</td><td><code>python main.py --monitor</code></td><td>Abre panel de solo lectura con fase actual, progreso y herramientas.</td></tr>
-          <tr><td>Pausar</td><td><code>P</code></td><td>Detiene temporalmente el avance entre pruebas.</td></tr>
-          <tr><td>Reanudar</td><td><code>R</code></td><td>Continua la ejecucion.</td></tr>
-          <tr><td>Finalizar ordenado</td><td><code>F</code></td><td>Cierra procesos y genera reportes con lo encontrado.</td></tr>
-        </tbody>
-      </table>
-    </section>
-  </main>
-
-  <footer class="footer">
-    <div class="shell">Scan Titan Community Edition. Auditoria automatizada, evidencia reproducible y reportes offline.</div>
-  </footer>
-</body>
+    </footer>
+  </body>
 </html>
