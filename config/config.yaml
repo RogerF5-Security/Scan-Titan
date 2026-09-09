@@ -186,6 +186,7 @@ tools:
     severity: critical,high,medium,low
     system_resolvers: true
     disable_host_error_skip: true
+    max_seed_urls: 60
     retries: 1
     request_timeout_seconds: 10
     timeout_seconds: 0

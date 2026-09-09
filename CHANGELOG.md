@@ -4,6 +4,22 @@ Este archivo registra los cambios funcionales verificables de cada version.
 
 Las versiones `21.3.2` y `21.3.3` documentan iteraciones locales verificadas que se consolidaron en `22.0.0`; no se publicaron como tags independientes.
 
+## [22.0.1] - 2026-09-09
+
+### Cobertura de herramientas externas
+
+- Nuclei aplica resolucion de sistema, deshabilita el abandono temprano por errores del host y sigue redirecciones del mismo origen en todos sus perfiles.
+- Los endpoints reales reunidos por reconocimiento y FFUF se normalizan, deduplican, limitan y entregan a Nuclei mediante una lista reproducible.
+- El perfil rapido incorpora severidad informativa y plantillas de headers, misconfiguraciones, exposiciones y tecnologia; los tres perfiles conservan evidencia JSONL.
+- La observabilidad distingue cero coincidencias, abandono del host, ausencia de plantillas, errores de salida y errores de parser.
+- Nmap fusiona rangos para eliminar puertos duplicados y el perfil Vulners usa deteccion exhaustiva de versiones para mejorar la obtencion de producto, version y CPE.
+- FFUF mide varias rutas inexistentes y combina tamano, palabras, lineas y destino de redireccion para suprimir respuestas soft-404/catch-all.
+- Subfinder deriva el dominio registrable del objetivo y SSRF documenta explicitamente cuando no existen parametros candidatos.
+
+### Validacion
+
+- Se agregan regresiones para perfiles y JSONL de Nuclei, clasificacion de errores, semillas del mismo origen, puertos Nmap, dominio base, soft-404 de FFUF y omision observable de SSRF.
+
 ## [22.0.0] - 2026-09-09
 
 ### Identidad y comunidad
@@ -73,4 +89,5 @@ Las versiones `21.3.2` y `21.3.3` documentan iteraciones locales verificadas que
 - El monitor marca como desactualizado un estado `running` sin actividad reciente y resuelve correctamente la carpeta de runtime de cada copia.
 - La finalizacion ordenada interrumpe colas y pausas pendientes antes de generar los reportes disponibles.
 
+[22.0.1]: https://github.com/RogerF5-Security/Scan-Titan/releases/tag/v22.0.1
 [22.0.0]: https://github.com/RogerF5-Security/Scan-Titan/releases/tag/v22.0.0

@@ -53,8 +53,8 @@ except Exception:
         return "" if value is None else str(value)
 
 
-DASHBOARD_VERSION = "22.0.0-community"
-SCANNER_FALLBACK = "TITAN v22.0.0 COMMUNITY ZERO-TOUCH"
+DASHBOARD_VERSION = "22.0.1-community"
+SCANNER_FALLBACK = "TITAN v22.0.1 COMMUNITY ZERO-TOUCH"
 BASE_DIR = Path(os.environ.get("SCAN_TITAN_BASE_DIR", Path(__file__).resolve().parents[2])).resolve()
 REPORTS_DIR = Path(os.environ.get("SCAN_TITAN_REPORTS_DIR", BASE_DIR / "reports")).resolve()
 CONFIG_FILE = Path(os.environ.get("SCAN_TITAN_CONFIG_FILE", BASE_DIR / "config" / "config.yaml")).resolve()

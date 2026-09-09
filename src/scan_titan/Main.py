@@ -239,7 +239,7 @@ KNOWLEDGE_FILE = _path_from_env(
     "SCAN_TITAN_KNOWLEDGE_FILE",
     _first_existing(BASE_DIR / "data" / "scan_titan_knowledge.json", BASE_DIR / "scan_titan_knowledge.json"),
 )
-SCAN_VERSION = "TITAN v22.0.0 COMMUNITY ZERO-TOUCH"
+SCAN_VERSION = "TITAN v22.0.1 COMMUNITY ZERO-TOUCH"
 HEADER_SEPARATOR = "=" * 72
 REPORT_SEPARATOR = "─" * 72
 
@@ -659,7 +659,7 @@ class Console:
 {Fore.RED}  ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝       ╚═╝   ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝
 {Fore.YELLOW}        [ SCAN TITAN :: WALL-BREACH VULNERABILITY ENGINE ]
 {Fore.CYAN}        [ ZERO-TOUCH | RECON | DAST | NMAP | NUCLEI | EVIDENCE ]
-{Fore.MAGENTA}        [ SCAN TITAN COMMUNITY | TATAKAE | ⚔️ v22.0.0 ⚔️ ]
+{Fore.MAGENTA}        [ SCAN TITAN COMMUNITY | TATAKAE | ⚔️ v22.0.1 ⚔️ ]
 """
         )
 
@@ -1271,6 +1271,7 @@ class RuntimeConfig:
         self.nuclei_templates_path = str(nuclei_cfg.get("templates_path", "nuclei-templates") or "nuclei-templates")
         self.nuclei_system_resolvers = bool(nuclei_cfg.get("system_resolvers", True))
         self.nuclei_disable_host_error_skip = bool(nuclei_cfg.get("disable_host_error_skip", True))
+        self.nuclei_max_seed_urls = max(1, min(int(nuclei_cfg.get("max_seed_urls", 60) or 60), 250))
         self.whatweb_aggression = int(whatweb_cfg.get("aggression", 3 if self.full_power else 1) or 1)
         if self.full_power:
             self.whatweb_aggression = max(self.whatweb_aggression, 4)
@@ -2623,19 +2624,8 @@ class ExternalTools:
         else:
             Console.warn("Nmap deshabilitado por politica")
         await asyncio.sleep(2.0)
-        if self.config.policy.enable_nuclei:
-            try:
-                await self.config.runtime_control.wait_if_paused()
-                if self.config.runtime_control.finish_requested:
-                    Console.warn("Nuclei omitido por finalizacion ordenada")
-                    return findings
-                nuclei_findings = await self.run_nuclei(ctx)
-                findings.extend(nuclei_findings)
-            except Exception as exc:
-                Console.warn(f"Orquestacion Nuclei fallida: {exc}")
-        else:
-            Console.warn("Nuclei deshabilitado por politica")
-        await asyncio.sleep(1.0)
+        # FFUF precedes Nuclei so confirmed route-discovery results can expand
+        # Nuclei coverage during the same zero-touch execution.
         if self.config.policy.enable_ffuf:
             try:
                 await self.config.runtime_control.wait_if_paused()
@@ -2648,6 +2638,19 @@ class ExternalTools:
                 Console.warn(f"Orquestacion FFUF fallida: {exc}")
         else:
             Console.warn("FFUF deshabilitado por politica")
+        await asyncio.sleep(1.0)
+        if self.config.policy.enable_nuclei:
+            try:
+                await self.config.runtime_control.wait_if_paused()
+                if self.config.runtime_control.finish_requested:
+                    Console.warn("Nuclei omitido por finalizacion ordenada")
+                    return findings
+                nuclei_findings = await self.run_nuclei(ctx)
+                findings.extend(nuclei_findings)
+            except Exception as exc:
+                Console.warn(f"Orquestacion Nuclei fallida: {exc}")
+        else:
+            Console.warn("Nuclei deshabilitado por politica")
         await asyncio.sleep(1.0)
         if self.config.policy.enable_zap:
             try:
@@ -2895,9 +2898,10 @@ class ExternalTools:
         if not binary:
             Console.warn("Subfinder no encontrado en PATH")
             return []
+        scan_domain = self._registrable_domain(ctx.target.host)
         max_minutes = max(1, int((self.config.subfinder_timeout + 59) / 60))
-        cmd = [binary, "-d", ctx.target.host, "-silent", "-nc", "-max-time", str(max_minutes)]
-        Console.step(f"Subfinder iniciado -> {ctx.target.host}")
+        cmd = [binary, "-d", scan_domain, "-silent", "-nc", "-max-time", str(max_minutes)]
+        Console.step(f"Subfinder iniciado -> {scan_domain} (objetivo original: {ctx.target.host})")
         Console.step(f"Subfinder comando: {self._format_command(cmd)}")
         if self.config.telemetry:
             self.config.telemetry.external_start("subfinder", "passive_subdomains", ctx.target.display, cmd)
@@ -2914,7 +2918,7 @@ class ExternalTools:
             duration=duration,
             parsed_count=len(findings),
             empty_reason=self._empty_reason(returncode, timed_out, stderr, stdout, None, len(findings)),
-            target=ctx.target.display,
+            target=scan_domain,
         )
         Console.ok(f"Subfinder finalizado: rc={returncode} duracion={duration:.1f}s parseados={len(findings)}")
         return findings
@@ -2932,7 +2936,8 @@ class ExternalTools:
         # supplied login/deep-link path hides sibling routes and produced very
         # incomplete recon on targets such as /app/login.
         target_url = urllib.parse.urljoin(self._origin_url(ctx.target.url), "FUZZ")
-        filter_args = await self._ffuf_filter_args(ctx)
+        soft404_signature = await self._ffuf_soft404_signature(ctx)
+        filter_args = self._ffuf_filter_args(soft404_signature)
         cmd = [
             binary,
             "-k",
@@ -2942,8 +2947,6 @@ class ExternalTools:
             target_url,
             "-mc",
             "200,204,301,302,307,308,401,403,405,500",
-            "-fc",
-            "404",
             *filter_args,
             "-rate",
             str(max(1, self.config.ffuf_rate)),
@@ -2962,7 +2965,7 @@ class ExternalTools:
         if self.config.telemetry:
             self.config.telemetry.external_start("ffuf", "route_fuzzing", ctx.target.display, cmd)
         stdout, stderr, timed_out, returncode, duration = await self._run_command(cmd, self.config.ffuf_timeout)
-        findings, hit_count = self._parse_ffuf(ctx, export_path, stdout)
+        findings, hit_count = self._parse_ffuf(ctx, export_path, stdout, soft404_signature)
         self._log_external(
             "ffuf",
             "route_fuzzing",
@@ -3059,6 +3062,7 @@ class ExternalTools:
                 [
                     binary,
                     "-sV",
+                    "--version-all",
                     "-Pn",
                     "-p",
                     cve_ports,
@@ -3126,7 +3130,7 @@ class ExternalTools:
         return findings
 
     def _nmap_ports_for(self, ctx: ScanContext, base_ports: str) -> str:
-        ports: list[str] = []
+        intervals: list[tuple[int, int]] = []
 
         def add(raw: Any) -> None:
             text = str(raw or "").strip()
@@ -3136,17 +3140,18 @@ class ExternalTools:
                 candidate = token.strip()
                 if not candidate:
                     continue
-                match = re.match(r"^(\d{1,5})(?:-\d{1,5})?$", candidate)
+                match = re.fullmatch(r"(\d{1,5})(?:-(\d{1,5}))?", candidate)
                 if match:
                     start = int(match.group(1))
-                    if 1 <= start <= 65535 and candidate not in ports:
-                        ports.append(candidate)
+                    end = int(match.group(2) or start)
+                    if 1 <= start <= end <= 65535:
+                        intervals.append((start, end))
                     continue
                 service_match = re.search(r"\b(\d{1,5})/(?:tcp|udp)\b", candidate, flags=re.IGNORECASE)
                 if service_match:
-                    port = service_match.group(1)
-                    if port not in ports:
-                        ports.append(port)
+                    port = int(service_match.group(1))
+                    if 1 <= port <= 65535:
+                        intervals.append((port, port))
 
         add(base_ports)
         if ctx.target.port:
@@ -3154,7 +3159,15 @@ class ExternalTools:
         for bucket in ("open_ports", "ports_services", "services"):
             for item in ctx.recon.get(bucket, []) or []:
                 add(item)
-        return ",".join(ports) or base_ports
+        if not intervals:
+            return base_ports
+        merged: list[list[int]] = []
+        for start, end in sorted(set(intervals)):
+            if merged and start <= merged[-1][1] + 1:
+                merged[-1][1] = max(merged[-1][1], end)
+            else:
+                merged.append([start, end])
+        return ",".join(str(start) if start == end else f"{start}-{end}" for start, end in merged)
 
     async def run_nuclei(self, ctx: ScanContext) -> list[Finding]:
         binary = self._resolve_binary("nuclei", "nuclei")
@@ -3188,7 +3201,16 @@ class ExternalTools:
                 Console.warn(f"Timeout en perfil Nuclei: {name}")
             elif returncode not in {0, None}:
                 Console.warn(f"Perfil Nuclei finalizo con codigo {returncode}: {clean_text(stderr, 220)}")
-            findings = self._parse_nuclei(ctx, export_path, stdout)
+            findings, parser_error = self._parse_nuclei_with_status(ctx, export_path, stdout)
+            empty_reason = self._nuclei_empty_reason(
+                returncode,
+                timed_out,
+                stderr,
+                stdout,
+                export_path,
+                len(findings),
+                parser_error,
+            )
             self._log_external(
                 "nuclei",
                 name,
@@ -3200,7 +3222,7 @@ class ExternalTools:
                 export_path,
                 duration=duration,
                 parsed_count=len(findings),
-                empty_reason=self._empty_reason(returncode, timed_out, stderr, stdout, export_path, len(findings)),
+                empty_reason=empty_reason,
                 target=ctx.target.display,
             )
             if findings:
@@ -3210,7 +3232,7 @@ class ExternalTools:
                         seen.add(finding.fingerprint)
                         all_findings.append(finding)
             else:
-                Console.warn(f"Nuclei finalizo sin hallazgos reportables: {name}")
+                Console.warn(f"Nuclei {name}: {empty_reason}")
             Console.ok(f"Nuclei perfil finalizado: {name} rc={returncode} duracion={duration:.1f}s parseados={len(findings)}")
         return all_findings
 
@@ -4072,12 +4094,108 @@ class ExternalTools:
         path.write_text("\n".join(values) + "\n", encoding="utf-8")
         return path
 
-    async def _ffuf_filter_args(self, ctx: ScanContext) -> list[str]:
-        url = urllib.parse.urljoin(self._origin_url(ctx.target.url), "scan-titan-ffuf-soft404-987654321")
-        result = await ctx.http.request("GET", url, allow_redirects=False, timeout=min(ctx.limits.timeout, 8))
-        if not result or result.status == 404 or result.body_len <= 0:
+    async def _ffuf_soft404_signature(self, ctx: ScanContext) -> dict[str, Any]:
+        """Measure a catch-all response with multiple non-existent routes."""
+        samples: list[dict[str, Any]] = []
+        origin = self._origin_url(ctx.target.url)
+        for index in range(3):
+            marker = f"scan-titan-soft404-{uuid.uuid4().hex}-{index}"
+            url = urllib.parse.urljoin(origin, marker)
+            result = await ctx.http.request(
+                "GET",
+                url,
+                allow_redirects=False,
+                timeout=min(ctx.limits.timeout, 8),
+            )
+            if not result or int(result.status or 0) == 404 or int(result.body_len or 0) <= 0:
+                continue
+            location = next(
+                (str(value) for key, value in (result.headers or {}).items() if str(key).lower() == "location"),
+                "",
+            )
+            text = str(result.text or "")
+            samples.append(
+                {
+                    "status": int(result.status or 0),
+                    "size": int(result.body_len or 0),
+                    "words": len(re.findall(r"\S+", text)),
+                    "lines": max(1, len(text.splitlines())),
+                    "redirect_shape": self._redirect_shape(location),
+                }
+            )
+        if len(samples) < 2 or len({item["status"] for item in samples}) != 1:
+            return {}
+        sizes = sorted(int(item["size"]) for item in samples)
+        midpoint = sizes[len(sizes) // 2]
+        tolerance = max(4, int(midpoint * 0.02))
+        signature = {
+            "status": samples[0]["status"],
+            "size_min": min(sizes),
+            "size_max": max(sizes),
+            "size_tolerance": tolerance,
+            "words": samples[0]["words"] if len({item["words"] for item in samples}) == 1 else None,
+            "lines": samples[0]["lines"] if len({item["lines"] for item in samples}) == 1 else None,
+            "redirect_shape": (
+                samples[0]["redirect_shape"]
+                if samples[0]["redirect_shape"] and len({item["redirect_shape"] for item in samples}) == 1
+                else ""
+            ),
+            "samples": len(samples),
+        }
+        ctx.recon["ffuf_soft404_signature"] = signature
+        return signature
+
+    def _ffuf_filter_args(self, signature: dict[str, Any]) -> list[str]:
+        if not signature:
             return []
-        return ["-fs", str(result.body_len)]
+        filters: list[str] = []
+        size_min = int(signature.get("size_min") or 0)
+        size_max = int(signature.get("size_max") or 0)
+        tolerance = int(signature.get("size_tolerance") or 0)
+        if size_min > 0 and size_max - size_min <= max(8, tolerance * 2):
+            filters.extend(["-fs", f"{max(1, size_min - tolerance)}-{size_max + tolerance}"])
+        if signature.get("words") is not None:
+            filters.extend(["-fw", str(signature["words"])])
+        if signature.get("lines") not in {None, 1}:
+            filters.extend(["-fl", str(signature["lines"])])
+        criteria = sum(1 for item in ("-fs", "-fw", "-fl") if item in filters)
+        if criteria >= 2:
+            filters.extend(["-fmode", "and"])
+        elif criteria == 0:
+            return []
+        return filters
+
+    @staticmethod
+    def _redirect_shape(value: Any) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        parsed = urllib.parse.urlsplit(text)
+        query_keys = sorted(key.lower() for key, _value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
+        path = re.sub(r"/+", "/", parsed.path or "/").rstrip("/") or "/"
+        return f"{path.lower()}?{','.join(query_keys)}"
+
+    def _ffuf_matches_soft404(self, item: dict[str, Any], signature: dict[str, Any]) -> bool:
+        if not signature or int(item.get("status") or 0) != int(signature.get("status") or -1):
+            return False
+        redirect = item.get("redirectlocation") or item.get("redirect-location") or ""
+        expected_redirect = str(signature.get("redirect_shape") or "")
+        if expected_redirect and self._redirect_shape(redirect) == expected_redirect:
+            return True
+        size = int(item.get("length") or 0)
+        tolerance = int(signature.get("size_tolerance") or 0)
+        size_matches = (
+            size > 0
+            and int(signature.get("size_min") or 0) - tolerance
+            <= size
+            <= int(signature.get("size_max") or 0) + tolerance
+        )
+        comparisons = [size_matches]
+        if signature.get("words") is not None:
+            comparisons.append(int(item.get("words") or -1) == int(signature["words"]))
+        if signature.get("lines") is not None:
+            comparisons.append(int(item.get("lines") or -1) == int(signature["lines"]))
+        return sum(bool(value) for value in comparisons) >= 2
 
     async def _whatweb_supports_official_flags(self, binary: str) -> bool:
         cached = self._whatweb_official_cache.get(binary)
@@ -4425,7 +4543,13 @@ class ExternalTools:
             )
         ]
 
-    def _parse_ffuf(self, ctx: ScanContext, export_path: Path, stdout: str) -> tuple[list[Finding], int]:
+    def _parse_ffuf(
+        self,
+        ctx: ScanContext,
+        export_path: Path,
+        stdout: str,
+        soft404_signature: dict[str, Any] | None = None,
+    ) -> tuple[list[Finding], int]:
         items: list[dict[str, Any]] = []
         raw_count = 0
         if export_path.exists():
@@ -4452,6 +4576,7 @@ class ExternalTools:
             raw_count = len(items)
         hits: list[dict[str, Any]] = []
         route_labels: list[str] = []
+        soft404_filtered_count = 0
         for item in items:
             input_data = item.get("input", {}) if isinstance(item.get("input"), dict) else {}
             raw_path = str(input_data.get("FUZZ") or item.get("path") or "")
@@ -4460,7 +4585,13 @@ class ExternalTools:
             url = item.get("url") or urllib.parse.urljoin(self._origin_url(ctx.target.url), path)
             redirect = item.get("redirectlocation") or item.get("redirect-location") or ""
             classification = self._ffuf_classification(path, status, redirect)
-            soft_filtered = classification == "soft_auth_redirect"
+            soft_filtered = classification == "soft_auth_redirect" or self._ffuf_matches_soft404(
+                item,
+                soft404_signature or {},
+            )
+            if soft_filtered:
+                soft404_filtered_count += 1
+                continue
             hit = {
                 "target": ctx.target.display,
                 "ip": ctx.target.ip,
@@ -4486,8 +4617,10 @@ class ExternalTools:
             }
             hits.append(hit)
             label = f"{path} ({status} {classification})" + (f" -> {redirect}" if redirect else "")
-            if not soft_filtered:
-                route_labels.append(label)
+            route_labels.append(label)
+        ctx.recon["ffuf_soft404_filtered_count"] = int(
+            ctx.recon.get("ffuf_soft404_filtered_count", 0) or 0
+        ) + soft404_filtered_count
         if hits:
             ctx.recon["wordlist_path_hits"] = list(
                 ctx.recon.get("wordlist_path_hits", []) + hits[: self.MAX_FFUF_RECON_HITS]
@@ -4496,7 +4629,7 @@ class ExternalTools:
             ctx.recon["unauthenticated_routes"] = sorted(set(ctx.recon.get("unauthenticated_routes", []) + route_labels))[:700]
         # FFUF only discovers attack surface. A route name or HTTP status is not
         # proof of a vulnerability, so all results stay in the Recon dashboard.
-        return [], max(raw_count, len(hits))
+        return [], len(hits)
 
     def _ffuf_classification(self, path: str, status: int, redirect: str) -> str:
         lower = path.lower()
@@ -5346,7 +5479,59 @@ class ExternalTools:
             flags.append("-sr")
         if self.config.nuclei_disable_host_error_skip:
             flags.append("-nmhe")
+        flags.append("-fhr")
         return flags
+
+    def _nuclei_seed_urls(self, ctx: ScanContext) -> list[str]:
+        """Return bounded, same-origin endpoints discovered before Nuclei runs."""
+        candidates: list[Any] = [ctx.target.url, self._origin_url(ctx.target.url)]
+        for key in (
+            "endpoints",
+            "site_map",
+            "discovered_paths",
+            "unauthenticated_routes",
+            "login_forms",
+            "forms",
+            "browser_routes",
+            "browser_login_routes",
+            "exposed_files",
+        ):
+            candidates.extend(ctx.recon.get(key, []) or [])
+        for item in ctx.recon.get("wordlist_path_hits", []) or []:
+            if isinstance(item, dict) and not item.get("soft404_filtered"):
+                candidates.append(item)
+
+        seeds: list[str] = []
+        seen: set[str] = set()
+        static_suffixes = (
+            ".avif", ".bmp", ".css", ".eot", ".gif", ".ico", ".jpeg", ".jpg",
+            ".map", ".mp3", ".mp4", ".otf", ".pdf", ".png", ".svg", ".ttf",
+            ".webm", ".webp", ".woff", ".woff2",
+        )
+        for item in candidates:
+            raw = self._zap_url_from_recon_item(ctx, item)
+            if isinstance(item, dict):
+                raw = str(item.get("url") or item.get("action") or item.get("path") or raw)
+            normalized = self._zap_normalize_seed(ctx, raw)
+            if not normalized:
+                continue
+            parsed = urllib.parse.urlsplit(normalized)
+            if parsed.path.lower().endswith(static_suffixes):
+                continue
+            normalized = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path or "/", parsed.query, ""))
+            key = normalized.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            seeds.append(normalized)
+            if len(seeds) >= self.config.nuclei_max_seed_urls:
+                break
+        return seeds or [ctx.target.url]
+
+    def _write_nuclei_target_list(self, ctx: ScanContext, slug: str, stamp: str) -> Path:
+        target_list = REPORTS_DIR / f"nuclei_targets_{slug}_{stamp}.txt"
+        target_list.write_text("\n".join(self._nuclei_seed_urls(ctx)) + "\n", encoding="utf-8")
+        return target_list
 
     def _resolve_nuclei_template_dirs(self, *relative_paths: str) -> list[Path]:
         configured = Path(self.config.nuclei_templates_path).expanduser()
@@ -5386,17 +5571,13 @@ class ExternalTools:
     def _nuclei_profiles(self, binary: str, ctx: ScanContext) -> list[tuple[str, list[str], Path]]:
         slug = self._slug(ctx.target.display)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output = REPORTS_DIR / f"nuclei_out_{slug}_{stamp}_vulnerabilities.json"
-        conservative_output = REPORTS_DIR / f"nuclei_out_{slug}_{stamp}_conservative.json"
-        cve_output = REPORTS_DIR / f"nuclei_out_{slug}_{stamp}_cves.json"
+        output = REPORTS_DIR / f"nuclei_out_{slug}_{stamp}_vulnerabilities.jsonl"
+        conservative_output = REPORTS_DIR / f"nuclei_out_{slug}_{stamp}_conservative.jsonl"
+        cve_output = REPORTS_DIR / f"nuclei_out_{slug}_{stamp}_cves.jsonl"
         common_flags = self._nuclei_common_flags()
         cve_selector_args = self._nuclei_cve_selector_args()
-        origin = self._origin_url(ctx.target.url)
-        supplied = urllib.parse.urlsplit(ctx.target.url)
-        seeds = [origin]
-        if supplied.path not in {"", "/"} or supplied.query:
-            seeds.append(ctx.target.url)
-        target_args = [argument for seed in seeds for argument in ("-u", seed)]
+        target_list = self._write_nuclei_target_list(ctx, slug, stamp)
+        target_args = ["-l", str(target_list)]
         return [
             (
                 "vulnerability_scan",
@@ -5417,7 +5598,7 @@ class ExternalTools:
                     "-stats",
                     "-si",
                     "5",
-                    "-json-export",
+                    "-jle",
                     str(output),
                 ],
                 output,
@@ -5426,7 +5607,10 @@ class ExternalTools:
                 "conservative_scan",
                 [
                     binary,
+                    *common_flags,
                     *target_args,
+                    "-tags",
+                    "misconfig,exposure,headers,tech",
                     "-severity",
                     "info,low,medium,high,critical",
                     "-rl",
@@ -5438,7 +5622,7 @@ class ExternalTools:
                     "-retries",
                     "1",
                     "-stats",
-                    "-json-export",
+                    "-jle",
                     str(conservative_output),
                 ],
                 conservative_output,
@@ -5461,7 +5645,7 @@ class ExternalTools:
                     "-retries",
                     "1",
                     "-stats",
-                    "-json-export",
+                    "-jle",
                     str(cve_output),
                 ],
                 cve_output,
@@ -5469,18 +5653,16 @@ class ExternalTools:
         ]
 
     def _parse_nuclei(self, ctx: ScanContext, export_path: Path, stdout: str) -> list[Finding]:
-        items: list[dict[str, Any]] = []
-        if export_path.exists():
-            try:
-                raw = export_path.read_text(encoding="utf-8", errors="ignore").strip()
-                parsed = json.loads(raw) if raw else []
-                if isinstance(parsed, list):
-                    items.extend(parsed)
-                elif isinstance(parsed, dict):
-                    items.extend(parsed.get("findings") or parsed.get("results") or [parsed])
-            except Exception:
-                items.extend(self._parse_json_lines(export_path.read_text(encoding="utf-8", errors="ignore")))
-        items.extend(self._parse_json_lines(stdout))
+        findings, _parser_error = self._parse_nuclei_with_status(ctx, export_path, stdout)
+        return findings
+
+    def _parse_nuclei_with_status(
+        self,
+        ctx: ScanContext,
+        export_path: Path,
+        stdout: str,
+    ) -> tuple[list[Finding], str]:
+        items, parser_error = self._load_nuclei_records(export_path, stdout)
         unique_items: dict[tuple[str, ...], dict[str, Any]] = {}
         matched_locations: dict[tuple[str, ...], list[str]] = {}
         global_templates = {"django-debug-config-enabled"}
@@ -5540,7 +5722,86 @@ class ExternalTools:
                 )
             )
         Console.ok(f"Nuclei parseado: {len(findings)} hallazgo(s)")
-        return findings
+        return findings, parser_error
+
+    def _load_nuclei_records(self, export_path: Path, stdout: str) -> tuple[list[dict[str, Any]], str]:
+        items: list[dict[str, Any]] = []
+        invalid_export_lines = 0
+        if export_path.exists():
+            raw = export_path.read_text(encoding="utf-8", errors="replace").strip()
+            if raw:
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        items.extend(item for item in parsed if isinstance(item, dict))
+                    elif isinstance(parsed, dict):
+                        nested = parsed.get("findings") or parsed.get("results")
+                        if isinstance(nested, list):
+                            items.extend(item for item in nested if isinstance(item, dict))
+                        else:
+                            items.append(parsed)
+                except json.JSONDecodeError:
+                    for line in raw.splitlines():
+                        clean = line.strip()
+                        if not clean:
+                            continue
+                        try:
+                            parsed = json.loads(clean)
+                        except json.JSONDecodeError:
+                            invalid_export_lines += 1
+                            continue
+                        if isinstance(parsed, dict):
+                            items.append(parsed)
+                        elif isinstance(parsed, list):
+                            items.extend(item for item in parsed if isinstance(item, dict))
+        items.extend(self._parse_json_lines(stdout))
+        parser_error = ""
+        if invalid_export_lines:
+            parser_error = (
+                f"Error de parser Nuclei: {invalid_export_lines} linea(s) JSONL invalidas "
+                f"en {export_path.name}."
+            )
+        return items, parser_error
+
+    def _nuclei_empty_reason(
+        self,
+        returncode: int | None,
+        timed_out: bool,
+        stderr: str,
+        stdout: str,
+        export_path: Path,
+        parsed_count: int,
+        parser_error: str,
+    ) -> str:
+        if parsed_count:
+            return ""
+        text = f"{stdout}\n{stderr}".lower()
+        if timed_out:
+            return "Nuclei agoto el timeout antes de completar el perfil."
+        host_abandoned_markers = (
+            "found unresponsive permanently",
+            "from target list as found unresponsive",
+            "no address found for host",
+            "could not resolve host",
+            "dial tcp: lookup",
+        )
+        if any(marker in text for marker in host_abandoned_markers):
+            return "Nuclei abandono el host por errores repetidos de resolucion o conectividad."
+        template_error_markers = (
+            "no templates provided",
+            "no templates found",
+            "no templates available",
+            "could not load template",
+            "failed to load template",
+        )
+        templates_loaded = self._extract_templates_loaded(text)
+        if any(marker in text for marker in template_error_markers) or templates_loaded == 0:
+            return "Nuclei no cargo plantillas utilizables para este perfil."
+        if parser_error:
+            return parser_error
+        if returncode not in {0, None}:
+            return f"Nuclei finalizo con codigo de salida no cero {returncode}."
+        return "Nuclei completo correctamente: 0 hallazgos."
 
     def _parse_json_lines(self, text: str) -> list[dict[str, Any]]:
         out = []
@@ -5555,6 +5816,23 @@ class ExternalTools:
 
     def _slug(self, value: str) -> str:
         return re.sub(r"[^A-Za-z0-9._-]+", "_", value) or "target"
+
+    @staticmethod
+    def _registrable_domain(host: str) -> str:
+        """Derive a practical base domain without adding a network PSL dependency."""
+        value = str(host or "").strip().strip(".").lower()
+        try:
+            ipaddress.ip_address(value)
+            return value
+        except ValueError:
+            pass
+        labels = [label for label in value.split(".") if label]
+        if len(labels) <= 2:
+            return value
+        common_second_level = {"ac", "co", "com", "edu", "gob", "gov", "mil", "net", "org"}
+        if len(labels[-1]) == 2 and labels[-2] in common_second_level and len(labels) >= 3:
+            return ".".join(labels[-3:])
+        return ".".join(labels[-2:])
 
     @staticmethod
     def _origin_url(value: str) -> str:

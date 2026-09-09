@@ -93,9 +93,13 @@ class SsrfModule(VulnerabilityModule):
             payloads.extend(self.CLOUD_PAYLOADS)
         targets = self._candidate_params(ctx)
         if not targets:
+            reason = "SSRF omitido: no se observaron parametros candidatos en los endpoints descubiertos."
             deferred = set(ctx.recon.get("policy_deferred_tests", []))
             deferred.add("ssrf_no_observed_candidate_parameter")
             ctx.recon["policy_deferred_tests"] = sorted(deferred)
+            ctx.recon["ssrf_status"] = "skipped_no_candidate_parameters"
+            ctx.recon["ssrf_note"] = reason
+            ctx.heartbeat(self.name, reason, 0, 0)
             return []
         findings: list[Finding] = []
         tested = 0
