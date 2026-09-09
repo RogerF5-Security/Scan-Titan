@@ -6,6 +6,7 @@ from urllib.parse import unquote, urlsplit
 
 
 WEB = Path(__file__).resolve().parents[1] / "docs" / "web"
+CHROME_EXTENSION = "https://chromewebstore.google.com/detail/scan-titan/epdbmbbfkmmhkfcfhlpncfkehgcaldcb"
 
 
 class Page(HTMLParser):
@@ -33,6 +34,7 @@ class PublicWebsiteTests(unittest.TestCase):
             self.assertLess(path.stat().st_size, 1_000_000, path.name)
         index = (WEB / "index.html").read_text(encoding="utf-8")
         self.assertIn('href="https://rogerf5-security.github.io/Scan-Titan/"', index)
+        self.assertIn(f'href="{CHROME_EXTENSION}"', index)
 
     def test_assets_and_local_links_resolve_inside_website(self):
         for path in WEB.glob("*.html"):

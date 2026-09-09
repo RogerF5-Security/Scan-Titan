@@ -2,7 +2,9 @@
 
 Scan Titan es un motor zero-touch de reconocimiento y orquestacion de vulnerabilidades para auditorias autorizadas. Lee objetivos, ejecuta modulos asincronos internos, integra motores externos cuando estan disponibles, deduplica hallazgos y genera evidencia operativa sin preguntas interactivas.
 
-La ejecucion estandar mantiene un piso minimo de 10,000 pruebas en modulos basados en wordlists, genera tarjetas PNG de evidencia para hallazgos reportables y captura evidencia de navegador cuando Playwright esta disponible.
+El ecosistema comunitario tambien incluye la [extension Scan Titan para Google Chrome](https://chromewebstore.google.com/detail/scan-titan/epdbmbbfkmmhkfcfhlpncfkehgcaldcb), que complementa el reconocimiento y los flujos de evaluacion web desde el navegador.
+
+La ejecucion estandar conserva wordlists amplias para descubrimiento, pero LFI y XSS usan presupuestos adaptativos: primero priorizan parametros observados y senales de reflexion y solo despues escalan payloads. El modo `--full` mantiene el perfil exhaustivo. Tambien genera tarjetas PNG de evidencia para hallazgos reportables y captura evidencia de navegador cuando Playwright esta disponible.
 
 ## Estructura
 
@@ -91,7 +93,11 @@ python .\main.py --monitor --path C:\Ruta\A\OtroEscaneo
 
 El monitor detecta la telemetria en `audit_reports/` o `reports/` y respeta las rutas de entorno del escaneo. Si pasan mas de 60 segundos sin actualizacion, muestra `SIN ACTUALIZAR`; un porcentaje antiguo no confirma que el proceso siga avanzando.
 
-LFI, XSS, SSRF y fuzzing de rutas usan un grupo de hasta 20 trabajadores. Los contadores avanzan al terminar cada intento, y cada 15 segundos se informa de peticiones HTTP terminadas, activas y en espera. Se conserva el jitter configurado: 10.000 peticiones a 1-2 segundos entre inicios pueden requerir unas cuatro horas. `F` evita consumir toda la cola pendiente antes de finalizar. Las mejoras requieren reiniciar las ejecuciones iniciadas con versiones anteriores.
+LFI, XSS, SSRF y fuzzing de rutas usan un grupo de hasta 20 trabajadores. Los contadores avanzan al terminar cada intento, y cada 15 segundos se informa de peticiones HTTP terminadas, activas y en espera. En zero-touch, LFI prioriza parametros de archivo/ruta observados y usa una muestra corta de alta senal cuando no existen. XSS ejecuta primero marcadores inocuos de reflexion y envia payloads activos solo a entradas que realmente reflejan contenido. Ambos tienen un presupuesto maximo de 1,200 pruebas y un limite de 45 minutos; normalmente terminan antes por descarte adaptativo. `F` evita consumir toda la cola pendiente antes de finalizar. Las mejoras requieren reiniciar ejecuciones iniciadas con versiones anteriores.
+
+LFI y XSS incorporan un cortacircuito de respuestas. Se comparan codigo HTTP, tamano, tipo de contenido y huella normalizada del cuerpo. Seis respuestas de bloqueo WAF equivalentes detienen el modulo; ocho respuestas estables sin variacion detienen solo el endpoint/parametro afectado. Los umbrales `adaptive_waf_block_threshold` y `adaptive_plateau_threshold` son configurables. La razon queda visible en el monitor y en la columna `Cortes Adaptativos` de la matriz de reconocimiento.
+
+El detalle de cada revision se conserva en [`CHANGELOG.md`](../CHANGELOG.md).
 
 ## Salidas
 

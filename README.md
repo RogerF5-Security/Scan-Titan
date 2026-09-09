@@ -1,8 +1,14 @@
 # Scan Titan
 
-Motor de auditoria automatizada en Python: reconocimiento, pruebas web, orquestacion de herramientas externas y reportes de vulnerabilidades. Preparacion de la edicion comunitaria para Pwn3d!.
+Motor comunitario de auditoria automatizada en Python: reconocimiento, pruebas web, orquestacion de herramientas externas y reportes de vulnerabilidades para profesionales y equipos de seguridad de cualquier region.
 
-**Version del motor:** 21.3.1. **Estado:** repositorio publico. [Web de Scan Titan](https://rogerf5-security.github.io/Scan-Titan/).
+**Version del motor:** 22.0.0. **Estado:** repositorio publico. [Web de Scan Titan](https://rogerf5-security.github.io/Scan-Titan/).
+
+## Extension para Chrome
+
+El ecosistema Scan Titan incluye una extension complementaria para Google Chrome, orientada a agilizar el reconocimiento y el flujo de evaluacion web desde el navegador.
+
+[Instalar Scan Titan desde Chrome Web Store](https://chromewebstore.google.com/detail/scan-titan/epdbmbbfkmmhkfcfhlpncfkehgcaldcb)
 
 ## Inicio rapido
 
@@ -78,7 +84,8 @@ Los reportes, sesiones y evidencias permanecen locales y estan excluidos de Git.
 - [Manual completo](docs/README.md).
 - [Presentacion web](docs/web/index.html): proceso, motores, resultados y guia de uso en espanol.
 - [Web publica](https://rogerf5-security.github.io/Scan-Titan/) y [mantenimiento de GitHub Pages](docs/WEB_PUBLICA.md), desde este mismo repositorio.
-- [Preparacion para el evento](docs/PUBLICACION.md).
+- [Guia de publicacion comunitaria](docs/PUBLICACION.md).
+- [Historial de versiones](CHANGELOG.md).
 - [Licencia MIT](LICENSE).
 
 ```text

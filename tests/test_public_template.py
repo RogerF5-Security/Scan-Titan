@@ -104,7 +104,7 @@ class PublicTemplateTests(unittest.TestCase):
         self.assertIn("WhatWeb Tecnologias", html)
         self.assertIn("class='chip", html)
 
-    def test_default_runtime_uses_10k_wordlist_floor_and_evidence(self) -> None:
+    def test_default_runtime_uses_adaptive_active_budgets_and_deep_floor(self) -> None:
         from Main import RuntimeConfig, build_argparser
 
         args = build_argparser().parse_args([])
@@ -112,7 +112,13 @@ class PublicTemplateTests(unittest.TestCase):
 
         self.assertGreaterEqual(config.max_tests_per_module, 10000)
         self.assertGreaterEqual(config.module_test_budget("path_discovery"), 10000)
-        self.assertGreaterEqual(config.module_test_budget("xss"), 10000)
+        self.assertEqual(config.module_test_budget("lfi"), 1200)
+        self.assertEqual(config.module_test_budget("xss"), 1200)
+        self.assertEqual(config.module_test_budget("client_side"), 240)
+        self.assertEqual(config.module_timeout_for("lfi"), 2700)
+        self.assertEqual(config.module_timeout_for("xss"), 2700)
+        self.assertEqual(config.adaptive_waf_block_threshold, 6)
+        self.assertEqual(config.adaptive_plateau_threshold, 8)
         self.assertGreaterEqual(config.ffuf_max_words, 10000)
         self.assertTrue(config.policy.evidence_cards)
         self.assertTrue(config.policy.browser_evidence)
@@ -125,6 +131,11 @@ class PublicTemplateTests(unittest.TestCase):
         self.assertEqual(config.zap_active_timeout, 0)
         self.assertEqual(config.external_profile_timeout("nmap", "network_vulnerability_scan", 0), 0)
         self.assertEqual(config.external_profile_timeout("nuclei", "vulnerability_scan", 0), 0)
+
+        deep_args = build_argparser().parse_args(["--profile", "deep"])
+        deep_config = RuntimeConfig(deep_args)
+        self.assertGreaterEqual(deep_config.module_test_budget("lfi"), 10000)
+        self.assertGreaterEqual(deep_config.module_test_budget("xss"), 10000)
 
     def test_recon_sitemap_filters_artifacts_and_builds_tree(self) -> None:
         from sitemap_manager import ReconSiteMapManager

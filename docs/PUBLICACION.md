@@ -1,4 +1,4 @@
-# Preparacion para el evento
+# Publicacion comunitaria
 
 El propietario autorizo la publicacion de este repositorio el 8 de septiembre de 2026. La web se despliega en GitHub Pages desde `docs/web/`. Ninguna accion modifica automaticamente la visibilidad del repositorio.
 
@@ -16,4 +16,4 @@ Las carpetas `reports/` y `audit_reports/` solo contienen marcadores vacios. Los
 - Completar pruebas de instalacion desde cero y escaneos de laboratorio con cada motor externo en ambos sistemas. Las pruebas automatizadas actuales son locales y no sustituyen esta validacion.
 - Revisar los textos todavia no traducidos, la calidad de hallazgos y el informe de demostracion antes de preparar una release.
 
-La publicacion del repositorio no equivale a certificar todos los escenarios de auditoria. La creacion de una release para el evento requiere completar las verificaciones pendientes de esta lista.
+La publicacion del repositorio no equivale a certificar todos los escenarios de auditoria. Cada release publica requiere completar las verificaciones pendientes de esta lista.

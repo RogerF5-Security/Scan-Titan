@@ -15,6 +15,10 @@ scan:
   jitter_min_seconds: 0.15
   jitter_max_seconds: 0.35
   throttle_batch_size: 25
+  # Stop a payload module after repeated equivalent WAF blocks. Stable 200
+  # responses stop only the affected endpoint/parameter.
+  adaptive_waf_block_threshold: 6
+  adaptive_plateau_threshold: 8
   payload_delay_seconds: 0.0
   payload_jitter_min_seconds: 1.0
   payload_jitter_max_seconds: 2.0
@@ -41,13 +45,14 @@ scan:
     auth_session: 10000
     authorization: 10000
     sqli: 10000
-    lfi: 10000
+    # Active injection budgets are adaptive in zero-touch. --full remains exhaustive.
+    lfi: 1200
     ssrf: 10000
     injection: 10000
-    xss: 10000
+    xss: 1200
     cors: 80
     waf_resilience: 180
-    client_side: 10000
+    client_side: 240
     browser_audit: 120
     advanced_logic: 220
   module_timeout_overrides:
@@ -58,12 +63,12 @@ scan:
     unauthenticated_map: 0
     path_discovery: 0
     sqli: 0
-    lfi: 0
+    lfi: 2700
     ssrf: 0
     injection: 0
-    xss: 0
+    xss: 2700
     waf_resilience: 0
-    client_side: 0
+    client_side: 1200
     browser_audit: 0
   module_throttle_overrides:
     sqli:

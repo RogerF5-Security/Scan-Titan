@@ -15,12 +15,164 @@ import aiohttp
 from aiohttp import web
 
 ROOT = Path(__file__).resolve().parents[1]
+os.environ.setdefault("SCAN_TITAN_BASE_DIR", str(ROOT))
+os.environ.setdefault("SCAN_TITAN_CONFIG_FILE", str(ROOT / "config" / "config.yaml"))
+os.environ.setdefault("SCAN_TITAN_REPORTS_DIR", str(ROOT / "reports"))
+os.environ.setdefault("SCAN_TITAN_TARGETS_FILE", str(ROOT / "targets" / "targets.txt"))
 sys.path.insert(0, str(ROOT / "src" / "scan_titan"))
 
 from modules.common import AsyncHttpClient, ScanContext, ScanLimits, Target, run_bounded
 
 
 class RuntimeProgressTests(unittest.IsolatedAsyncioTestCase):
+    def test_adaptive_guard_stops_repeated_waf_signature(self) -> None:
+        from modules.adaptive_guard import AdaptiveResponseGuard
+
+        guard = AdaptiveResponseGuard(block_threshold=6)
+        response = SimpleNamespace(
+            status=403,
+            text="Access denied. Request blocked. Cloudflare Ray ID 123456789012",
+            content_type="text/html",
+            body_len=72,
+            headers={"CF-Ray": "fixture"},
+        )
+
+        decisions = []
+        for index in range(6):
+            response.text = f"Access denied. Request blocked. Cloudflare Ray ID 12345678901{index}"
+            response.headers = {"CF-Ray": f"fixture-{index}"}
+            decisions.append(
+                guard.observe(response, input_key=f"/endpoint|q{index}", probe_value=f"payload-{index}")
+            )
+
+        self.assertFalse(any(item.stop_module for item in decisions[:5]))
+        self.assertTrue(decisions[-1].stop_module)
+        self.assertTrue(decisions[-1].blocked)
+        self.assertIn("status=403", decisions[-1].reason)
+        self.assertIn("Cloudflare", decisions[-1].reason)
+
+    def test_adaptive_guard_does_not_stop_on_size_alone(self) -> None:
+        from modules.adaptive_guard import AdaptiveResponseGuard
+
+        guard = AdaptiveResponseGuard(plateau_threshold=8)
+        decisions = []
+        for marker in "abcdefgh":
+            response = SimpleNamespace(
+                status=200,
+                text=f"<html>distinct response {marker}</html>",
+                content_type="text/html",
+                body_len=40,
+                headers={},
+            )
+            decisions.append(
+                guard.observe(response, input_key="/search|q", probe_value=f"payload-{marker}")
+            )
+
+        self.assertFalse(any(item.stop_input or item.stop_module for item in decisions))
+
+    def test_adaptive_guard_stops_only_stable_input(self) -> None:
+        from modules.adaptive_guard import AdaptiveResponseGuard
+
+        guard = AdaptiveResponseGuard(plateau_threshold=8)
+        response = SimpleNamespace(
+            status=200,
+            text="<html>same application response</html>",
+            content_type="text/html",
+            body_len=38,
+            headers={},
+        )
+
+        decision = None
+        for index in range(8):
+            decision = guard.observe(
+                response,
+                input_key="/search|q",
+                probe_value=f"payload-{index}",
+                baseline=response,
+            )
+
+        self.assertIsNotNone(decision)
+        self.assertTrue(decision.stop_input)
+        self.assertFalse(decision.stop_module)
+        self.assertTrue(guard.input_stopped("/search|q"))
+        self.assertFalse(guard.input_stopped("/other|q"))
+        self.assertIn("iguales al control", decision.reason)
+
+    async def test_xss_repeated_waf_page_short_circuits_module(self) -> None:
+        from modules.xss import XssModule
+
+        calls = []
+
+        async def request(_method, url, *, params, **_kwargs):
+            calls.append((url, dict(params)))
+            return SimpleNamespace(
+                status=403,
+                text="Access denied. Request blocked. Cloudflare Ray ID 123456789012",
+                content_type="text/html",
+                body_len=72,
+                headers={"CF-Ray": "fixture"},
+            )
+
+        target = Target("https://example.test/", "https://example.test/", "example.test", "192.0.2.1", "https", 443)
+        ctx = ScanContext(
+            target=target,
+            http=SimpleNamespace(request=request, circuit_open=False),
+            wordlists={},
+            limits=ScanLimits(max_tests_per_module=1200),
+            recon={"endpoints": [{"url": f"https://example.test/{i}", "params": ["q"]} for i in range(100)]},
+            heartbeat=lambda *_args: None,
+        )
+
+        findings = await XssModule().run(ctx)
+
+        summary = ctx.recon["xss_active_summary"]["adaptive_guard"]
+        self.assertEqual(findings, [])
+        self.assertTrue(summary["module_stopped"])
+        self.assertLessEqual(len(calls), 13)
+        self.assertEqual(ctx.recon["adaptive_stops"][0]["module"], "xss")
+
+    async def test_lfi_repeated_waf_page_short_circuits_module(self) -> None:
+        from modules.lfi import LfiModule
+
+        calls = []
+
+        async def request(_method, url, *, params, **_kwargs):
+            value = next(iter(params.values()))
+            calls.append((url, value))
+            if value == "scan_titan_control":
+                return SimpleNamespace(
+                    status=200,
+                    text="normal application page",
+                    content_type="text/html",
+                    body_len=23,
+                    headers={},
+                )
+            return SimpleNamespace(
+                status=403,
+                text="Access denied. Request blocked. Cloudflare Ray ID 123456789012",
+                content_type="text/html",
+                body_len=72,
+                headers={"CF-Ray": "fixture"},
+            )
+
+        target = Target("https://example.test/", "https://example.test/", "example.test", "192.0.2.1", "https", 443)
+        ctx = ScanContext(
+            target=target,
+            http=SimpleNamespace(request=request, circuit_open=False),
+            wordlists={},
+            limits=ScanLimits(max_tests_per_module=1200),
+            recon={},
+            heartbeat=lambda *_args: None,
+        )
+
+        findings = await LfiModule().run(ctx)
+
+        summary = ctx.recon["lfi_active_summary"]["adaptive_guard"]
+        self.assertEqual(findings, [])
+        self.assertTrue(summary["module_stopped"])
+        self.assertLess(len(calls), 30)
+        self.assertEqual(ctx.recon["adaptive_stops"][0]["module"], "lfi")
+
     async def test_pool_is_bounded_and_preserves_all_jobs(self) -> None:
         active = peak = 0
         completed = []
@@ -76,6 +228,7 @@ class RuntimeProgressTests(unittest.IsolatedAsyncioTestCase):
 
         for module in (LfiModule(), XssModule(), SsrfModule()):
             with self.subTest(module=module.name):
+                expected_capacity = 8 if module.name in {"lfi", "xss"} else 20
                 gate = asyncio.Event()
                 at_capacity = asyncio.Event()
                 starts = 0
@@ -88,19 +241,21 @@ class RuntimeProgressTests(unittest.IsolatedAsyncioTestCase):
                     if params and "scan_titan_control" in params.values():
                         return response
                     starts += 1
-                    if starts == 20:
+                    if starts == expected_capacity:
                         at_capacity.set()
                     await gate.wait()
                     completed += 1
-                    return response
+                    reflected = next(iter(params.values())) if module.name == "xss" else "fixture"
+                    return SimpleNamespace(status=200, text=reflected, content_type="text/html")
 
                 target = Target("https://example.test/", "https://example.test/", "example.test", "192.0.2.1", "https", 443)
+                param_name = {"lfi": "file", "xss": "q", "ssrf": "url"}[module.name]
                 ctx = ScanContext(
                     target=target,
                     http=SimpleNamespace(request=request, circuit_open=False),
                     wordlists={},
                     limits=ScanLimits(max_tests_per_module=80),
-                    recon={"endpoints": [{"url": f"https://example.test/api/{i}", "params": ["url"]} for i in range(30)]},
+                    recon={"endpoints": [{"url": f"https://example.test/api/{i}", "params": [param_name]} for i in range(30)]},
                     heartbeat=lambda _m, _d, tested, _h: progress.append((tested, completed)),
                 )
                 with patch("modules.lfi.lfi_payloads", return_value=[(f"fixture-{i}", "missing-marker") for i in range(80)]), patch(
@@ -109,7 +264,7 @@ class RuntimeProgressTests(unittest.IsolatedAsyncioTestCase):
                     task = asyncio.create_task(module.run(ctx))
                     try:
                         await asyncio.wait_for(at_capacity.wait(), 1)
-                        self.assertEqual(starts, 20)
+                        self.assertEqual(starts, expected_capacity)
                         self.assertEqual(progress, [])
                         gate.set()
                         await asyncio.wait_for(task, 2)
@@ -119,6 +274,93 @@ class RuntimeProgressTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(completed, 80)
                 self.assertEqual(progress[-1], (80, 80))
                 self.assertTrue(all(tested <= done for tested, done in progress))
+
+    async def test_xss_non_reflecting_surface_stops_after_canary_stage(self) -> None:
+        from modules.xss import XssModule
+
+        calls = []
+
+        async def request(_method, url, *, params, **_kwargs):
+            calls.append((url, dict(params)))
+            return SimpleNamespace(status=200, text="no reflection", content_type="text/html")
+
+        target = Target("https://example.test/", "https://example.test/", "example.test", "192.0.2.1", "https", 443)
+        ctx = ScanContext(
+            target=target,
+            http=SimpleNamespace(request=request, circuit_open=False),
+            wordlists={"xss": ["<script>alert(1)</script>"] * 2000},
+            limits=ScanLimits(max_tests_per_module=1200),
+            recon={},
+            heartbeat=lambda *_args: None,
+        )
+
+        findings = await XssModule().run(ctx)
+
+        self.assertEqual(findings, [])
+        self.assertEqual(len(calls), min(10, len(XssModule.DEFAULT_PARAMS)))
+        self.assertEqual(ctx.recon["xss_active_summary"]["payload_probes"], 0)
+        self.assertTrue(ctx.recon["xss_active_completed"])
+
+    async def test_xss_reflecting_surface_escalates_and_confirms_once(self) -> None:
+        from modules.xss import XssModule
+
+        calls = []
+
+        async def request(_method, url, *, params, **_kwargs):
+            value = next(iter(params.values()))
+            calls.append((url, value))
+            return SimpleNamespace(
+                status=200,
+                text=f"<html>{value}</html>",
+                content_type="text/html",
+                body_len=len(value) + 13,
+                elapsed=0.01,
+            )
+
+        target = Target("https://example.test/?q=base", "https://example.test/?q=base", "example.test", "192.0.2.1", "https", 443)
+        ctx = ScanContext(
+            target=target,
+            http=SimpleNamespace(request=request, circuit_open=False),
+            wordlists={},
+            limits=ScanLimits(max_tests_per_module=1200),
+            recon={},
+            heartbeat=lambda *_args: None,
+        )
+
+        findings = await XssModule().run(ctx)
+
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].param, "q")
+        self.assertEqual(ctx.recon["xss_active_summary"]["reflected_inputs"], 1)
+        self.assertLessEqual(ctx.recon["xss_active_summary"]["payload_probes"], XssModule.ZERO_TOUCH_PAYLOADS_PER_INPUT)
+        self.assertLess(len(calls), 60)
+
+    async def test_lfi_without_observed_parameters_uses_high_signal_fallback(self) -> None:
+        from modules.lfi import LfiModule
+
+        calls = []
+
+        async def request(_method, url, *, params, **_kwargs):
+            calls.append((url, dict(params)))
+            return SimpleNamespace(status=200, text="control page", content_type="text/html")
+
+        target = Target("https://example.test/", "https://example.test/", "example.test", "192.0.2.1", "https", 443)
+        ctx = ScanContext(
+            target=target,
+            http=SimpleNamespace(request=request, circuit_open=False),
+            wordlists={"lfi": ["../../../../etc/passwd"] * 2000},
+            limits=ScanLimits(max_tests_per_module=1200),
+            recon={},
+            heartbeat=lambda *_args: None,
+        )
+
+        findings = await LfiModule().run(ctx)
+
+        summary = ctx.recon["lfi_active_summary"]
+        self.assertEqual(findings, [])
+        self.assertEqual(summary["mode"], "fallback-high-signal")
+        self.assertLessEqual(summary["planned"], 8 * LfiModule.FALLBACK_PAYLOADS_PER_INPUT)
+        self.assertLess(len(calls), 200)
 
     async def test_finish_interrupts_throttle_without_sending_requests(self) -> None:
         control = SimpleNamespace(finish_requested=False, wait_if_paused=AsyncMock())

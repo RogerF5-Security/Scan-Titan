@@ -239,7 +239,7 @@ KNOWLEDGE_FILE = _path_from_env(
     "SCAN_TITAN_KNOWLEDGE_FILE",
     _first_existing(BASE_DIR / "data" / "scan_titan_knowledge.json", BASE_DIR / "scan_titan_knowledge.json"),
 )
-SCAN_VERSION = "TITAN v21.3.1 COMMUNITY ZERO-TOUCH"
+SCAN_VERSION = "TITAN v22.0.0 COMMUNITY ZERO-TOUCH"
 HEADER_SEPARATOR = "=" * 72
 REPORT_SEPARATOR = "─" * 72
 
@@ -659,7 +659,7 @@ class Console:
 {Fore.RED}  ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝       ╚═╝   ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝
 {Fore.YELLOW}        [ SCAN TITAN :: WALL-BREACH VULNERABILITY ENGINE ]
 {Fore.CYAN}        [ ZERO-TOUCH | RECON | DAST | NMAP | NUCLEI | EVIDENCE ]
-{Fore.MAGENTA}        [ SCAN TITAN COMMUNITY | TATAKAE | ⚔️ v21.1.0 ⚔️ ]
+{Fore.MAGENTA}        [ SCAN TITAN COMMUNITY | TATAKAE | ⚔️ v22.0.0 ⚔️ ]
 """
         )
 
@@ -1220,6 +1220,12 @@ class RuntimeConfig:
         if self.jitter_max_seconds < self.jitter_min_seconds:
             self.jitter_max_seconds = self.jitter_min_seconds
         self.throttle_batch_size = int(scan_cfg.get("throttle_batch_size", 25) or 25)
+        self.adaptive_waf_block_threshold = max(
+            3, int(scan_cfg.get("adaptive_waf_block_threshold", 6) or 6)
+        )
+        self.adaptive_plateau_threshold = max(
+            4, int(scan_cfg.get("adaptive_plateau_threshold", 8) or 8)
+        )
         self.payload_delay_seconds = float(scan_cfg.get("payload_delay_seconds", self.delay_seconds) or 0.0)
         self.payload_jitter_min_seconds = float(scan_cfg.get("payload_jitter_min_seconds", 1.0) or 0.0)
         self.payload_jitter_max_seconds = float(scan_cfg.get("payload_jitter_max_seconds", 2.0) or self.payload_jitter_min_seconds)
@@ -1413,7 +1419,7 @@ class RuntimeConfig:
     def module_test_budget(self, module_name: str) -> int:
         normalized = str(module_name or "").strip().lower()
         budget = max(1, int(self.module_test_budgets.get(normalized, self.max_tests_per_module)))
-        if not self.full_power and normalized in self.WORDLIST_HEAVY_MODULES:
+        if self.policy.profile == "deep" and normalized in self.WORDLIST_HEAVY_MODULES:
             budget = max(self.DEFAULT_MIN_WORDLIST_TESTS, budget)
         return budget
 
@@ -6033,6 +6039,8 @@ class ScanTitan:
             jitter_min_seconds=self.config.jitter_min_seconds,
             jitter_max_seconds=self.config.jitter_max_seconds,
             throttle_batch_size=self.config.throttle_batch_size,
+            adaptive_waf_block_threshold=self.config.adaptive_waf_block_threshold,
+            adaptive_plateau_threshold=self.config.adaptive_plateau_threshold,
             allow_cloud_ssrf=self.config.allow_cloud_ssrf,
             allow_state_changing_api_tests=self.config.policy.allow_state_changing_api_tests,
             perform_upload_attempts=self.config.policy.perform_upload_attempts,
@@ -6397,6 +6405,8 @@ class ScanTitan:
             services = list(services) + [f"wafw00f: {clean_text(recon.get('wafw00f_evidence'), 700)}"]
         if recon.get("waf_resilience_summary"):
             services = list(services) + [f"Perfil WAF: {clean_text(recon.get('waf_resilience_summary'), 700)}"]
+        if recon.get("adaptive_stops"):
+            services = list(services) + [f"Cortes adaptativos: {clean_text(recon.get('adaptive_stops'), 1200)}"]
         if recon.get("http_methods"):
             services = list(services) + [f"HTTP Methods: {', '.join(recon.get('http_methods', []))}"]
         if recon.get("tls_supported_protocols"):
@@ -6431,6 +6441,14 @@ class ScanTitan:
                 for item in recon.get("waf_probe_results", [])
                 if isinstance(item, dict)
             ][:120],
+            "Cortes Adaptativos": [
+                (
+                    f"{item.get('module', '')}: "
+                    f"{item.get('stop_reason') or (str(item.get('stopped_inputs', 0)) + ' entrada(s) sin variacion')}"
+                )
+                for item in recon.get("adaptive_stops", [])
+                if isinstance(item, dict)
+            ],
             "Archivos Expuestos": recon.get("exposed_files", []),
             "Subdominios": recon.get("subdomains", []),
             "WebSockets": recon.get("websockets", []),

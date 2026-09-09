@@ -42,7 +42,10 @@ class ClientSideModule(VulnerabilityModule):
         if not result:
             return findings
         soup = BeautifulSoup(result.text, "html.parser")
-        findings.extend(await self._reflected_xss(ctx))
+        # El modulo XSS dedicado ya ejecuta deteccion adaptativa de reflexion.
+        # No repetir aqui hasta 10k payloads sobre la misma superficie.
+        if not ctx.recon.get("xss_active_completed"):
+            findings.extend(await self._reflected_xss(ctx))
         if ctx.policy.allow_state_changing_api_tests:
             findings.extend(await self._stored_candidate(ctx, result.final_url, soup))
         else:
@@ -59,7 +62,8 @@ class ClientSideModule(VulnerabilityModule):
     async def _reflected_xss(self, ctx: ScanContext) -> list[Finding]:
         findings = []
         tested = 0
-        payloads = xss_payloads(ctx.wordlists, self.XSS_PAYLOADS, limit=max(ctx.limits.max_tests_per_module, 40))
+        fallback_budget = min(max(1, ctx.limits.max_tests_per_module), 120)
+        payloads = xss_payloads(ctx.wordlists, self.XSS_PAYLOADS, limit=min(12, fallback_budget))
         candidates = [(ctx.target.url, self.PARAMS)]
         for endpoint in ctx.recon.get("endpoints", []):
             if endpoint.get("url"):
@@ -67,7 +71,7 @@ class ClientSideModule(VulnerabilityModule):
         for url, params in candidates:
             for param in params[:12]:
                 for payload in payloads:
-                    if tested >= ctx.limits.max_tests_per_module:
+                    if tested >= fallback_budget:
                         return findings
                     tested += 1
                     ctx.heartbeat("xss_reflected", f"{param}={payload[:24]}", tested, len(findings))

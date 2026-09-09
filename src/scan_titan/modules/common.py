@@ -1071,6 +1071,8 @@ class ScanLimits:
     jitter_min_seconds: float = 0.5
     jitter_max_seconds: float = 1.5
     throttle_batch_size: int = 25
+    adaptive_waf_block_threshold: int = 6
+    adaptive_plateau_threshold: int = 8
     allow_cloud_ssrf: bool = False
     allow_state_changing_api_tests: bool = False
     perform_upload_attempts: bool = False
