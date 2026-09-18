@@ -26,7 +26,6 @@ def configure_environment() -> None:
     os.environ.setdefault("SCAN_TITAN_STATE_FILE", str(REPORTS_DIR / "scan_titan_state.json"))
     os.environ.setdefault("SCAN_TITAN_RUNTIME_FILE", str(REPORTS_DIR / "scan_titan_runtime.json"))
     os.environ.setdefault("SCAN_TITAN_RECON_FILE", str(REPORTS_DIR / "Recon_Matrix.xlsx"))
-    os.environ.setdefault("SCAN_TITAN_SITEMAP_FILE", str(REPORTS_DIR / "Recon_Sitemap.json"))
     os.environ.setdefault("SCAN_TITAN_KNOWLEDGE_FILE", str(PROJECT_ROOT / "data" / "scan_titan_knowledge.json"))
     os.environ.setdefault("SCAN_TITAN_DASHBOARD_FILE", str(REPORTS_DIR / "Daily_vulns_report.html"))
 

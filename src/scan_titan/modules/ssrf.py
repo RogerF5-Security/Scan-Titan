@@ -3,7 +3,15 @@ from __future__ import annotations
 import asyncio
 import urllib.parse
 
-from .common import Finding, ScanContext, VulnerabilityModule, clean_text, run_bounded, url_with_params
+from .common import (
+    Finding,
+    ScanContext,
+    VulnerabilityModule,
+    clean_text,
+    record_probe_timeout,
+    run_bounded,
+    url_with_params,
+)
 
 
 def ssrf_response_proven(
@@ -173,7 +181,14 @@ class SsrfModule(VulnerabilityModule):
         async def run_probe(spec: tuple) -> None:
             await probe(*spec)
 
-        await run_bounded(specs, run_probe, should_stop=ctx.should_stop)
+        await run_bounded(
+            specs,
+            run_probe,
+            limit=20,
+            should_stop=ctx.should_stop,
+            item_timeout=max(10.0, float(ctx.limits.timeout) * 2.0),
+            on_timeout=lambda item, seconds: record_probe_timeout(ctx, self.name, item, seconds),
+        )
         return findings
 
     def _candidate_params(self, ctx: ScanContext) -> list[tuple[str, str]]:

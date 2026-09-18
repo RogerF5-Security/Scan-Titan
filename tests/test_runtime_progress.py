@@ -3,9 +3,12 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
+import urllib.parse
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -25,6 +28,29 @@ from modules.common import AsyncHttpClient, ScanContext, ScanLimits, Target, run
 
 
 class RuntimeProgressTests(unittest.IsolatedAsyncioTestCase):
+    def test_resource_sampler_aggregates_child_processes(self) -> None:
+        from resource_monitor import ProcessTreeSampler
+
+        sampler = ProcessTreeSampler(os.getpid())
+        child = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(5)"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            time.sleep(0.15)
+            sampler.sample()  # Prime the child CPU counter.
+            time.sleep(0.05)
+            sample = sampler.sample()
+        finally:
+            child.terminate()
+            child.wait(timeout=3)
+
+        self.assertTrue(sample["available"])
+        self.assertGreaterEqual(sample["process_count"], 2)
+        self.assertIn(child.pid, {item["pid"] for item in sample["processes"]})
+        self.assertGreater(float(sample["ram_mb"]), 0.0)
+
     def test_adaptive_guard_stops_repeated_waf_signature(self) -> None:
         from modules.adaptive_guard import AdaptiveResponseGuard
 
@@ -191,6 +217,67 @@ class RuntimeProgressTests(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(peak, 20)
         self.assertEqual(sorted(completed), list(range(1000)))
         self.assertEqual(active, 0)
+
+    async def test_probe_timeout_isolated_and_remaining_jobs_continue(self) -> None:
+        completed: list[int] = []
+        timed_out: list[int] = []
+
+        async def probe(value: int) -> None:
+            if value == 1:
+                await asyncio.Event().wait()
+            completed.append(value)
+
+        stats = await run_bounded(
+            range(5),
+            probe,
+            limit=2,
+            item_timeout=0.03,
+            on_timeout=lambda item, _seconds: timed_out.append(item),
+        )
+
+        self.assertEqual(timed_out, [1])
+        self.assertEqual(sorted(completed), [0, 2, 3, 4])
+        self.assertEqual(stats["timed_out"], 1)
+        self.assertEqual(stats["completed"], 4)
+
+    async def test_status_route_filter_returns_only_raw_200_and_403_paths(self) -> None:
+        from modules.status_route_filter import StatusRouteFilterModule
+
+        statuses = {
+            "/": 200,
+            "/ok": 200,
+            "/linked": 200,
+            "/forbidden": 403,
+            "/redirect": 302,
+            "/error": 500,
+        }
+
+        async def request(_method, url, **_kwargs):
+            path = urllib.parse.urlsplit(url).path or "/"
+            status = statuses.get(path, 404)
+            body = '<html><a href="/linked">linked</a><a href="/redirect">redirect</a></html>' if path == "/" else ""
+            return SimpleNamespace(
+                status=status,
+                url=url,
+                final_url=url,
+                content_type="text/html" if body else "text/plain",
+                text=body,
+            )
+
+        target = Target("https://example.test/", "https://example.test/", "example.test", "192.0.2.1", "https", 443)
+        ctx = ScanContext(
+            target=target,
+            http=SimpleNamespace(request=request, circuit_open=False),
+            wordlists={"rutas": ["ok", "forbidden", "redirect", "error"]},
+            limits=ScanLimits(timeout=1, max_tests_per_module=40),
+            recon={"endpoints": []},
+            heartbeat=lambda *_args: None,
+        )
+
+        routes = await StatusRouteFilterModule().collect(ctx)
+
+        self.assertEqual(routes, ["/", "/forbidden", "/linked", "/ok"])
+        self.assertTrue(all(" " not in route for route in routes))
 
     async def test_cancellation_drains_worker_tasks(self) -> None:
         entered = asyncio.Event()

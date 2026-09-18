@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import urllib.parse
 
-from .common import Finding, ScanContext, VulnerabilityModule, run_bounded, url_with_params
+from .common import Finding, ScanContext, VulnerabilityModule, record_probe_timeout, run_bounded, url_with_params
 from .adaptive_guard import AdaptiveResponseGuard
 from .payload_utils import xss_payloads
 
@@ -88,6 +88,8 @@ class XssModule(VulnerabilityModule):
             reflection_probe,
             limit=8,
             should_stop=lambda: ctx.should_stop() or guard.stop_module,
+            item_timeout=max(10.0, float(ctx.limits.timeout) * 2.0),
+            on_timeout=lambda item, seconds: record_probe_timeout(ctx, self.name, item, seconds),
         )
 
         remaining = max(0, budget - tested)
@@ -171,6 +173,8 @@ class XssModule(VulnerabilityModule):
             run_probe,
             limit=8,
             should_stop=lambda: ctx.should_stop() or guard.stop_module,
+            item_timeout=max(10.0, float(ctx.limits.timeout) * 2.0),
+            on_timeout=lambda item, seconds: record_probe_timeout(ctx, self.name, item, seconds),
         )
         ctx.recon["xss_active_completed"] = True
         ctx.recon["xss_active_summary"] = {

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import urllib.parse
 
-from .common import Finding, ScanContext, VulnerabilityModule, run_bounded, url_with_params
+from .common import Finding, ScanContext, VulnerabilityModule, record_probe_timeout, run_bounded, url_with_params
 from .adaptive_guard import AdaptiveResponseGuard
 from .payload_utils import lfi_payloads
 
@@ -154,6 +154,8 @@ class LfiModule(VulnerabilityModule):
             run_probe,
             limit=8,
             should_stop=lambda: ctx.should_stop() or guard.stop_module,
+            item_timeout=max(10.0, float(ctx.limits.timeout) * 2.0),
+            on_timeout=lambda item, seconds: record_probe_timeout(ctx, self.name, item, seconds),
         )
         guard_summary = guard.summary()
         if guard_summary["waf_vendor"]:

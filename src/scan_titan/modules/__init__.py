@@ -15,7 +15,7 @@ from .injection import InjectionModule
 from .lfi import LfiModule
 from .paths import PathDiscoveryModule
 from .recon_surface import ReconSurfaceModule
-from .site_map import SiteMapModule
+from .status_route_filter import StatusRouteFilterModule
 from .unauthenticated_map import UnauthenticatedMapModule
 from .sqli import SqliModule
 from .ssrf import SsrfModule
@@ -26,7 +26,7 @@ DEFAULT_MODULES = [
     ReconSurfaceModule,
     ApiSpaModule,
     ApiDastModule,
-    SiteMapModule,
+    StatusRouteFilterModule,
     UnauthenticatedMapModule,
     PathDiscoveryModule,
     HeadersModule,

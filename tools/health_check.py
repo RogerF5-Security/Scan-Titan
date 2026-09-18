@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 
-REQUIRED_IMPORTS = ("aiohttp", "yaml", "openpyxl", "pandas", "bs4", "PIL")
+REQUIRED_IMPORTS = ("aiohttp", "yaml", "openpyxl", "pandas", "bs4", "PIL", "psutil")
 OPTIONAL_IMPORTS = ("playwright", "win32gui")
 EXTERNAL_TOOLS = ("nmap", "nuclei", "ffuf", "whatweb", "subfinder", "wafw00f")
 ZAP_WINDOWS_CANDIDATES = (
@@ -37,7 +37,8 @@ def check_paths(root: Path) -> bool:
         root / "wordlists",
         root / "docs" / "web" / "index.html",
         root / "src" / "scan_titan" / "Main.py",
-        root / "src" / "scan_titan" / "sitemap_manager.py",
+        root / "src" / "scan_titan" / "resource_monitor.py",
+        root / "src" / "scan_titan" / "modules" / "status_route_filter.py",
         root / "src" / "scan_titan" / "modules",
     ]
     paths_ok = all(status(str(path.relative_to(root)), path.exists()) for path in required)

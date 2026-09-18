@@ -72,7 +72,7 @@ from evidence_manager import EvidenceManager
 from knowledge_manager import KnowledgeBase
 from owasp_2025 import normalize_owasp_2025
 from recon_manager import ReconMatrixManager
-from sitemap_manager import ReconSiteMapManager
+from resource_monitor import ProcessTreeSampler
 
 try:
     from technical_detail_exporter import TechnicalDetailExporter, TechnicalDetailOptions
@@ -235,17 +235,21 @@ CONFIG_FILE = _path_from_env(
     "SCAN_TITAN_CONFIG_FILE",
     _first_existing(BASE_DIR / "config" / "config.yaml", BASE_DIR / "config.yaml"),
 )
+LOCAL_CONFIG_FILE = _path_from_env(
+    "SCAN_TITAN_LOCAL_CONFIG_FILE",
+    CONFIG_FILE.with_name("config.local.yaml"),
+)
 KNOWLEDGE_FILE = _path_from_env(
     "SCAN_TITAN_KNOWLEDGE_FILE",
     _first_existing(BASE_DIR / "data" / "scan_titan_knowledge.json", BASE_DIR / "scan_titan_knowledge.json"),
 )
-SCAN_VERSION = "TITAN v22.0.1 COMMUNITY ZERO-TOUCH"
+SCAN_VERSION = "TITAN v22.1.0 COMMUNITY ZERO-TOUCH"
 HEADER_SEPARATOR = "=" * 72
 REPORT_SEPARATOR = "─" * 72
 
 
 class RuntimeTelemetry:
-    SCHEMA = "scan_titan_runtime_v1"
+    SCHEMA = "scan_titan_runtime_v2"
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -280,6 +284,8 @@ class RuntimeTelemetry:
             "events": [],
             "modules": [],
             "external_tools": [],
+            "resources": {},
+            "resource_peaks": {"cpu_percent": 0.0, "ram_mb": 0.0, "process_count": 0},
         }
         self._module_started = 0.0
         self._target_started = 0.0
@@ -590,6 +596,18 @@ class RuntimeTelemetry:
         self.state["finding_occurrences"] = sum(max(1, int(record.get("occurrences") or 1)) for record in records)
         self.write()
 
+    def resource_sample(self, sample: dict[str, Any]) -> None:
+        self.state["resources"] = sample
+        if sample.get("available"):
+            peaks = self.state.setdefault(
+                "resource_peaks",
+                {"cpu_percent": 0.0, "ram_mb": 0.0, "process_count": 0},
+            )
+            peaks["cpu_percent"] = max(float(peaks.get("cpu_percent") or 0.0), float(sample.get("cpu_percent") or 0.0))
+            peaks["ram_mb"] = max(float(peaks.get("ram_mb") or 0.0), float(sample.get("ram_mb") or 0.0))
+            peaks["process_count"] = max(int(peaks.get("process_count") or 0), int(sample.get("process_count") or 0))
+        self.write()
+
     def event(self, level: str, message: str) -> None:
         events = list(self.state.get("events", []))
         events.insert(0, {"time": now_text(), "level": level, "message": clean_text(message, 360)})
@@ -659,7 +677,7 @@ class Console:
 {Fore.RED}  ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝       ╚═╝   ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝
 {Fore.YELLOW}        [ SCAN TITAN :: WALL-BREACH VULNERABILITY ENGINE ]
 {Fore.CYAN}        [ ZERO-TOUCH | RECON | DAST | NMAP | NUCLEI | EVIDENCE ]
-{Fore.MAGENTA}        [ SCAN TITAN COMMUNITY | TATAKAE | ⚔️ v22.0.1 ⚔️ ]
+{Fore.MAGENTA}        [ SCAN TITAN COMMUNITY | TATAKAE | ⚔️ v22.1.0 ⚔️ ]
 """
         )
 
@@ -885,7 +903,7 @@ class PolicyEngine:
         "mapping": {
             "api_spa",
             "api_dast",
-            "site_map",
+            "status_route_filter",
             "unauthenticated_map",
             "path_discovery",
             "client_side",
@@ -1144,7 +1162,7 @@ class RuntimeConfig:
         "api_spa",
         "path_discovery",
         "recon_surface",
-        "site_map",
+        "status_route_filter",
         "unauthenticated_map",
     }
     WORDLIST_HEAVY_MODULES = {
@@ -1166,6 +1184,7 @@ class RuntimeConfig:
 
     def __init__(self, args: argparse.Namespace) -> None:
         config_data = self._load_yaml(CONFIG_FILE)
+        config_data = self._merge_config(config_data, self._load_yaml(LOCAL_CONFIG_FILE))
         scan_cfg = config_data.get("scan", {}) if isinstance(config_data.get("scan"), dict) else {}
         self.full_power = bool(getattr(args, "full", False))
         self.policy = PolicyEngine(config_data, args).build()
@@ -1248,8 +1267,8 @@ class RuntimeConfig:
         if self.route_jitter_max_seconds < self.route_jitter_min_seconds:
             self.route_jitter_max_seconds = self.route_jitter_min_seconds
         self.module_test_budgets = {} if self.full_power else self._int_map(scan_cfg.get("module_test_budgets", {}))
-        self.module_timeout_overrides = (
-            {} if self.full_power else self._int_map(scan_cfg.get("module_timeout_overrides", {}), minimum=0)
+        self.module_timeout_overrides = self._int_map(
+            scan_cfg.get("module_timeout_overrides", {}), minimum=1
         )
         self.verify_tls = bool(args.verify_tls or scan_cfg.get("verify_tls", False))
         tools_cfg = config_data.get("tools", {}) if isinstance(config_data.get("tools"), dict) else {}
@@ -1262,11 +1281,11 @@ class RuntimeConfig:
         zap_cfg = tools_cfg.get("zap", {}) if isinstance(tools_cfg.get("zap"), dict) else {}
         self.nmap_timeout = self._timeout_value(
             args.nmap_timeout,
-            0 if self.full_power else nmap_cfg.get("timeout_seconds", 0),
+            3600 if self.full_power else nmap_cfg.get("timeout_seconds", 1800),
         )
         self.nuclei_timeout = self._timeout_value(
             args.nuclei_timeout,
-            0 if self.full_power else nuclei_cfg.get("timeout_seconds", 0),
+            5400 if self.full_power else nuclei_cfg.get("timeout_seconds", 2400),
         )
         self.nuclei_templates_path = str(nuclei_cfg.get("templates_path", "nuclei-templates") or "nuclei-templates")
         self.nuclei_system_resolvers = bool(nuclei_cfg.get("system_resolvers", True))
@@ -1291,12 +1310,8 @@ class RuntimeConfig:
             if self.full_power
             else self._string_set(nuclei_cfg.get("profiles", ["vulnerability_scan"]))
         )
-        self.nmap_profile_timeouts = (
-            {} if self.full_power else self._int_map(nmap_cfg.get("profile_timeouts", {}), minimum=0)
-        )
-        self.nuclei_profile_timeouts = (
-            {} if self.full_power else self._int_map(nuclei_cfg.get("profile_timeouts", {}), minimum=0)
-        )
+        self.nmap_profile_timeouts = self._int_map(nmap_cfg.get("profile_timeouts", {}), minimum=1)
+        self.nuclei_profile_timeouts = self._int_map(nuclei_cfg.get("profile_timeouts", {}), minimum=1)
         self.ffuf_timeout = int(1800 if self.full_power else (ffuf_cfg.get("timeout_seconds", 600) or 600))
         self.ffuf_threads = int(50 if self.full_power else (ffuf_cfg.get("threads", 20) or 20))
         self.ffuf_rate = int(100 if self.full_power else (ffuf_cfg.get("rate", 35) or 35))
@@ -1322,26 +1337,29 @@ class RuntimeConfig:
             self.zap_mode = "baseline"
         self.zap_start_daemon = self._bool_config(zap_cfg.get("start_daemon", True))
         self.zap_shutdown_after_scan = self._bool_config(zap_cfg.get("shutdown_after_scan", True))
-        self.zap_timeout = self._timeout_value(None if self.full_power else zap_cfg.get("timeout_seconds", 0), 0)
+        self.zap_timeout = self._timeout_value(
+            7200 if self.full_power else zap_cfg.get("timeout_seconds", 3600),
+            3600,
+        )
         self.zap_startup_timeout = int(180 if self.full_power else (zap_cfg.get("startup_timeout_seconds", 90) or 90))
         self.zap_spider_timeout = self._timeout_value(
-            None if self.full_power else zap_cfg.get("spider_timeout_seconds", 0),
-            0,
+            1200 if self.full_power else zap_cfg.get("spider_timeout_seconds", 600),
+            600,
         )
         self.zap_passive_timeout = self._timeout_value(
-            None if self.full_power else zap_cfg.get("passive_timeout_seconds", 0),
-            0,
+            1200 if self.full_power else zap_cfg.get("passive_timeout_seconds", 600),
+            600,
         )
         self.zap_active_timeout = self._timeout_value(
-            None if self.full_power else zap_cfg.get("active_timeout_seconds", 0),
-            0,
+            3600 if self.full_power else zap_cfg.get("active_timeout_seconds", 1800),
+            1800,
         )
         self.zap_max_seed_urls = int(500 if self.full_power else (zap_cfg.get("max_seed_urls", 160) or 160))
         self.zap_max_alerts = int(1000 if self.full_power else (zap_cfg.get("max_alerts", 500) or 500))
         self.zap_max_children = int(120 if self.full_power else (zap_cfg.get("max_children", 40) or 40))
         self.module_timeout = self._timeout_value(
             args.module_timeout,
-            0 if self.full_power else scan_cfg.get("module_timeout_seconds", 0),
+            3600 if self.full_power else scan_cfg.get("module_timeout_seconds", 900),
         )
         self.skip_external = bool(args.skip_external or self.policy.skip_external)
         self.allow_cloud_ssrf = self.policy.allow_cloud_ssrf
@@ -1353,6 +1371,10 @@ class RuntimeConfig:
         self.knowledge_path = self._path_config(knowledge_cfg.get("path"), KNOWLEDGE_FILE)
         self.knowledge_min_score = float(knowledge_cfg.get("min_score", 5.0) or 5.0)
         reporting_cfg = config_data.get("reporting", {}) if isinstance(config_data.get("reporting"), dict) else {}
+        self.external_reports_dir = self._path_config(
+            reporting_cfg.get("external_reports_dir"),
+            REPORTS_DIR / "external reports",
+        )
         self.report_min_severity = "Info" if self.full_power else normalize_severity(reporting_cfg.get("min_severity", "Low"))
         self.include_recon_info_findings = (
             True if self.full_power else self._bool_config(reporting_cfg.get("include_recon_info_findings", False))
@@ -1364,6 +1386,16 @@ class RuntimeConfig:
         self.technical_detail = TechnicalDetailOptions.from_config(technical_cfg, BASE_DIR, REPORTS_DIR)
         self.audit_id_argument = str(getattr(args, "audit_id", "") or "").strip()
         self.audit_id_automatic = False
+
+    @classmethod
+    def _merge_config(cls, base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+        merged = dict(base)
+        for key, value in override.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = cls._merge_config(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
 
     def _load_yaml(self, path: Path) -> dict[str, Any]:
         if not path.exists() or not YAML_AVAILABLE:
@@ -1381,15 +1413,15 @@ class RuntimeConfig:
             return value.strip().lower() in {"1", "true", "yes", "on", "enabled"}
         return bool(value)
 
-    def _timeout_value(self, value: Any, default: Any = 0) -> int:
+    def _timeout_value(self, value: Any, default: Any = 1) -> int:
         raw = default if value in (None, "") else value
         try:
-            return max(0, int(raw))
+            return max(1, int(raw))
         except (TypeError, ValueError):
             try:
-                return max(0, int(default or 0))
+                return max(1, int(default or 1))
             except (TypeError, ValueError):
-                return 0
+                return 1
 
     def _int_map(self, value: Any, minimum: int = 1) -> dict[str, int]:
         if not isinstance(value, dict):
@@ -1426,7 +1458,7 @@ class RuntimeConfig:
 
     def module_timeout_for(self, module_name: str) -> int:
         normalized = str(module_name or "").strip().lower()
-        return max(0, int(self.module_timeout_overrides.get(normalized, self.module_timeout)))
+        return max(1, int(self.module_timeout_overrides.get(normalized, self.module_timeout)))
 
     def apply_module_throttle(self, module_name: str, limits: ScanLimits) -> dict[str, Any]:
         normalized = str(module_name or "").strip().lower()
@@ -1472,9 +1504,9 @@ class RuntimeConfig:
     def external_profile_timeout(self, tool: str, profile: str, fallback: int) -> int:
         timeouts = self.nmap_profile_timeouts if tool == "nmap" else self.nuclei_profile_timeouts
         try:
-            return max(0, int(timeouts.get(profile.lower(), fallback)))
+            return max(1, int(timeouts.get(profile.lower(), fallback)))
         except (TypeError, ValueError):
-            return max(0, int(fallback or 0))
+            return max(1, int(fallback or 1))
 
     def ensure_audit_id(self) -> str:
         if not self.technical_detail.enabled:
@@ -1529,7 +1561,6 @@ class RuntimeConfig:
 class TargetLoader:
     def __init__(self, config: RuntimeConfig) -> None:
         self.config = config
-        self._whatweb_official_cache: dict[str, bool] = {}
 
     def load(self) -> list[Target]:
         raw = [self.config.target] if self.config.target else []
@@ -2368,7 +2399,7 @@ class ReportWriter:
                 "<li>Dashboard de vulnerabilidades: <code>Daily_vulns_report.html</code></li>",
                 "<li>Matriz de reconocimiento: <code>Recon_Matrix.xlsx</code></li>",
                 "<li>Dashboard de reconocimiento: <code>Recon_Dashboard.html</code></li>",
-                "<li>Site Map de reconocimiento: <code>Recon_Sitemap.html</code></li>",
+                "<li>Rutas HTTP 200/403: integradas en <code>Recon_Matrix.xlsx</code></li>",
                 "<li>Estado de deduplicación: <code>scan_titan_state.json</code></li>",
                 "</ul>",
                 "</section>",
@@ -2495,6 +2526,18 @@ class ExternalTools:
 
     def __init__(self, config: RuntimeConfig) -> None:
         self.config = config
+        self.external_reports_dir = Path(
+            getattr(config, "external_reports_dir", REPORTS_DIR / "external reports")
+        )
+        self._whatweb_official_cache: dict[str, bool] = {}
+
+    def _external_report_path(self, tool: str, filename: str) -> Path:
+        """Return the centralized raw-output path for an external engine."""
+        safe_name = Path(str(filename)).name
+        if not safe_name:
+            raise ValueError(f"Nombre de reporte externo invalido para {tool}")
+        self.external_reports_dir.mkdir(parents=True, exist_ok=True)
+        return self.external_reports_dir / safe_name
 
     def write_tool_inventory(self) -> None:
         inventory = []
@@ -2739,7 +2782,7 @@ class ExternalTools:
             return []
         slug = self._slug(ctx.target.display)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        export_path = REPORTS_DIR / f"wafw00f_out_{slug}_{stamp}.json"
+        export_path = self._external_report_path("wafw00f", f"wafw00f_out_{slug}_{stamp}.json")
         cmd = [binary, "-a", "-f", "json", ctx.target.url]
         Console.step(f"wafw00f iniciado -> {ctx.target.url}")
         Console.step(f"wafw00f comando: {self._format_command(cmd)}")
@@ -2997,7 +3040,7 @@ class ExternalTools:
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         def xml_path(profile: str) -> Path:
-            return REPORTS_DIR / f"nmap_out_{slug}_{profile}_{stamp}.xml"
+            return self._external_report_path("nmap", f"nmap_out_{slug}_{profile}_{stamp}.xml")
 
         network_ports = self._nmap_ports_for(
             ctx,
@@ -3243,7 +3286,7 @@ class ExternalTools:
             mode = "baseline"
         slug = self._slug(ctx.target.display)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        export_path = REPORTS_DIR / f"zap_alerts_{slug}_{stamp}.json"
+        export_path = self._external_report_path("zap", f"zap_alerts_{slug}_{stamp}.json")
         command_label = ["ZAP API", self.config.zap_api_url, f"mode={mode}"]
         started = time.monotonic()
         zap_process: asyncio.subprocess.Process | None = None
@@ -3520,7 +3563,7 @@ class ExternalTools:
 
     def _zap_seed_urls(self, ctx: ScanContext) -> list[str]:
         seeds: list[str] = [ctx.target.url]
-        for key in ("discovered_paths", "unauthenticated_routes", "site_map"):
+        for key in ("discovered_paths", "unauthenticated_routes", "raw_routes"):
             for item in ctx.recon.get(key, []) or []:
                 seeds.append(self._zap_url_from_recon_item(ctx, item))
         for item in ctx.recon.get("endpoints", []) or []:
@@ -3716,7 +3759,9 @@ class ExternalTools:
         results = await self._zap_api("spider/view/results", {"scanId": scan_id}, timeout=20)
         found = results.get("results", [])
         if isinstance(found, list):
-            ctx.recon["site_map"] = sorted(set(ctx.recon.get("site_map", []) + [str(item) for item in found]))[:1200]
+            ctx.recon["discovered_paths"] = sorted(
+                set(ctx.recon.get("discovered_paths", []) + [str(item) for item in found])
+            )[:1200]
             return len(found)
         return 0
 
@@ -3892,7 +3937,9 @@ class ExternalTools:
             ctx.recon["zap_alerts"] = sorted(set(ctx.recon.get("zap_alerts", []) + labels))[:500]
         urls = urls_payload.get("urls", [])
         if isinstance(urls, list) and urls:
-            ctx.recon["site_map"] = sorted(set(ctx.recon.get("site_map", []) + [str(item) for item in urls]))[:1200]
+            ctx.recon["discovered_paths"] = sorted(
+                set(ctx.recon.get("discovered_paths", []) + [str(item) for item in urls])
+            )[:1200]
 
     def _parse_zap_alerts(self, ctx: ScanContext, alerts: list[Any]) -> list[Finding]:
         findings: list[Finding] = []
@@ -4996,7 +5043,7 @@ class ExternalTools:
             export_info = ""
             if export_path is not None:
                 size = export_path.stat().st_size if export_path.exists() else 0
-                export_info = f" | export={export_path.name} size={size}"
+                export_info = f" | export={export_path} size={size}"
             with log_path.open("a", encoding="utf-8") as handle:
                 handle.write(
                     f"[{now_text()}] {tool}:{profile} rc={returncode} timeout={timed_out}"
@@ -5487,7 +5534,7 @@ class ExternalTools:
         candidates: list[Any] = [ctx.target.url, self._origin_url(ctx.target.url)]
         for key in (
             "endpoints",
-            "site_map",
+            "raw_routes",
             "discovered_paths",
             "unauthenticated_routes",
             "login_forms",
@@ -5571,9 +5618,9 @@ class ExternalTools:
     def _nuclei_profiles(self, binary: str, ctx: ScanContext) -> list[tuple[str, list[str], Path]]:
         slug = self._slug(ctx.target.display)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output = REPORTS_DIR / f"nuclei_out_{slug}_{stamp}_vulnerabilities.jsonl"
-        conservative_output = REPORTS_DIR / f"nuclei_out_{slug}_{stamp}_conservative.jsonl"
-        cve_output = REPORTS_DIR / f"nuclei_out_{slug}_{stamp}_cves.jsonl"
+        output = self._external_report_path("nuclei", f"nuclei_out_{slug}_{stamp}_vulnerabilities.jsonl")
+        conservative_output = self._external_report_path("nuclei", f"nuclei_out_{slug}_{stamp}_conservative.jsonl")
+        cve_output = self._external_report_path("nuclei", f"nuclei_out_{slug}_{stamp}_cves.jsonl")
         common_flags = self._nuclei_common_flags()
         cve_selector_args = self._nuclei_cve_selector_args()
         target_list = self._write_nuclei_target_list(ctx, slug, stamp)
@@ -6169,13 +6216,13 @@ class ScanTitan:
     def __init__(self, config: RuntimeConfig) -> None:
         self.config = config
         self.telemetry = RuntimeTelemetry(RUNTIME_FILE)
+        self.resource_sampler = ProcessTreeSampler(os.getpid())
         self.config.telemetry = self.telemetry
         self.config.runtime_control.telemetry = self.telemetry
         self.telemetry.phase("initializing", "Runtime Scan Titan inicializado")
         self.state = StateStore(STATE_FILE)
         self.reporter = ReportWriter(REPORTS_DIR, HISTORY_DIR)
         self.recon_matrix = ReconMatrixManager(RECON_FILE)
-        self.sitemap = ReconSiteMapManager(REPORTS_DIR, SCAN_VERSION)
         self.external = ExternalTools(config)
         self.evidence = EvidenceManager(
             REPORTS_DIR,
@@ -6201,6 +6248,7 @@ class ScanTitan:
 
     async def run(self) -> int:
         control_task = asyncio.create_task(self.config.runtime_control.keyboard_loop())
+        resource_task: asyncio.Task[None] | None = None
         try:
             self.telemetry.phase("cleanup", "limpieza de targets")
             CleanupManager(self.config.targets_dir).run()
@@ -6212,6 +6260,7 @@ class ScanTitan:
                 return 2
             audit_id = self.config.ensure_audit_id()
             self.telemetry.start(targets, self.config)
+            resource_task = asyncio.create_task(self._resource_loop(), name="scan-titan-resource-monitor")
             Console.ok(f"Targets loaded: {len(targets)}")
             if audit_id:
                 label = "ID maestro automatico de auditoria" if self.config.audit_id_automatic else "ID maestro de auditoria"
@@ -6263,11 +6312,6 @@ class ScanTitan:
                 Console.ok(f"Dashboard de recon actualizado: {recon_dashboard}")
             except Exception as exc:
                 Console.warn(f"No se pudo generar el dashboard de recon: {clean_text(exc, 240)}")
-            try:
-                sitemap_dashboard = self.sitemap.write_html()
-                Console.ok(f"Site Map de recon actualizado: {sitemap_dashboard}")
-            except Exception as exc:
-                Console.warn(f"No se pudo generar el Site Map de recon: {clean_text(exc, 240)}")
             self.telemetry.phase("dashboard", "generacion de dashboard HTML")
             await self.generate_html_dashboard()
             self.telemetry.finish("finished")
@@ -6283,10 +6327,31 @@ class ScanTitan:
             self.telemetry.finish("failed")
             raise
         finally:
+            if resource_task is not None:
+                resource_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await resource_task
             self.config.runtime_control.stop_listener()
             control_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await control_task
+
+    async def _resource_loop(self) -> None:
+        last_console = 0.0
+        while True:
+            sample = await asyncio.to_thread(self.resource_sampler.sample)
+            self.telemetry.resource_sample(sample)
+            now = time.monotonic()
+            if sample.get("available") and now - last_console >= 10.0:
+                Console.step(
+                    "Recursos Scan Titan: "
+                    f"CPU={float(sample.get('cpu_percent') or 0.0):.1f}% "
+                    f"RAM={float(sample.get('ram_mb') or 0.0):.1f} MB "
+                    f"procesos={int(sample.get('process_count') or 0)} "
+                    f"hijos={int(sample.get('child_process_count') or 0)}"
+                )
+                last_console = now
+            await asyncio.sleep(2.0)
 
     async def _scan_target_guarded(
         self,
@@ -6367,8 +6432,7 @@ class ScanTitan:
                 "exposed_files": [],
                 "subdomains": [],
                 "websockets": [],
-                "site_map": [],
-                "site_functions": [],
+                "raw_routes": [],
                 "forms": [],
                 "http_methods": [],
                 "waf_cdn": [],
@@ -6472,22 +6536,6 @@ class ScanTitan:
             "Recon Matrix updated once: "
             f"kept={recon_stats['kept']} discarded/duplicate={recon_stats['discarded']}"
         )
-        try:
-            sitemap_stats = await asyncio.to_thread(
-                self.sitemap.update_target,
-                target=target.display,
-                base_url=target.url,
-                ip=target.ip,
-                recon=recon,
-                timestamp=timestamp,
-            )
-            Console.ok(
-                "Site Map de recon actualizado: "
-                f"rutas={sitemap_stats['routes']} externas={sitemap_stats['external']} "
-                f"html={sitemap_stats['html']}"
-            )
-        except Exception as exc:
-            Console.warn(f"No se pudo actualizar el Site Map de recon: {clean_text(exc, 240)}")
         duration = time.monotonic() - started
         self.print_target_summary(target, enriched, duration, report_path)
         self.telemetry.target_end(target, enriched, duration)
@@ -6582,7 +6630,7 @@ class ScanTitan:
     async def _run_module(self, module: Any, ctx: ScanContext, timeout: int) -> list[Finding]:
         Console.phase(f"MODULE: {module.name}")
         throttle = self.config.apply_module_throttle(module.name, ctx.limits)
-        timeout_label = "sin limite" if int(timeout or 0) <= 0 else f"{timeout}s"
+        timeout_label = f"{max(1, int(timeout or 1))}s"
         Console.step(
             f"Controles del modulo: pruebas<={ctx.limits.max_tests_per_module} "
             f"timeout={timeout_label} ritmo={throttle['mode']} "
@@ -6597,10 +6645,10 @@ class ScanTitan:
             if self.config.runtime_control.finish_requested:
                 self.telemetry.module_end(module.name, [], "skipped", "Finalizacion controlada solicitada")
                 return []
-            if int(timeout or 0) <= 0:
-                findings = await module.run(ctx)
-            else:
-                findings = await asyncio.wait_for(module.run(ctx), timeout=timeout)
+            findings = await asyncio.wait_for(
+                module.run(ctx),
+                timeout=max(1, int(timeout or 1)),
+            )
             self._emit_new_findings(findings)
             status = "skipped" if self.config.runtime_control.finish_requested else "finished"
             self.telemetry.module_end(module.name, findings, status)
@@ -6608,6 +6656,15 @@ class ScanTitan:
             return findings
         except asyncio.TimeoutError:
             Console.warn(f"{module.name}: timeout del modulo despues de {timeout}s")
+            skips = ctx.recon.setdefault("timeout_skips", [])
+            if isinstance(skips, list):
+                skips.append(
+                    {
+                        "module": module.name,
+                        "reason": "module_timeout",
+                        "timeout_seconds": max(1, int(timeout or 1)),
+                    }
+                )
             if not self.config.include_pipeline_findings:
                 self.telemetry.module_end(module.name, [], "timeout", f"Timeout despues de {timeout}s")
                 return []
@@ -6670,8 +6727,7 @@ class ScanTitan:
             for item in recon.get("endpoints", [])
             if isinstance(item, dict) and item.get("url")
         ]
-        site_map = recon.get("site_map", [])[:300]
-        site_functions = recon.get("site_functions", [])
+        raw_routes = recon.get("raw_routes", [])[:1000]
         ports_services = recon.get("ports_services") or recon.get("open_ports", [])
         services = recon.get("services", [])
         headers = recon.get("headers_exposed") or recon.get("security_headers", "")
@@ -6691,8 +6747,6 @@ class ScanTitan:
             services = list(services) + [f"TLS Protocols: {', '.join(recon.get('tls_supported_protocols', []))}"]
         if recon.get("zap_alerts"):
             services = list(services) + [f"ZAP Alerts: {clean_text(recon.get('zap_alerts'), 1800)}"]
-        if site_functions:
-            endpoints.append(f"Functional Map: {', '.join(site_functions)}")
         return {
             "Target": target.display,
             "IP": target.ip,
@@ -6702,7 +6756,7 @@ class ScanTitan:
             "Servicios": services,
             "Tecnologias": recon.get("technologies", []),
             "Enrutamiento/Endpoints descubiertos": list(
-                dict.fromkeys(endpoints + site_map + recon.get("discovered_paths", []))
+                dict.fromkeys(endpoints + raw_routes + recon.get("discovered_paths", []))
             ),
             "Formularios de Login": list(dict.fromkeys(recon.get("login_forms", []) + recon.get("forms", []))),
             "Librerias JS": recon.get("js_libraries", []),
@@ -6861,9 +6915,9 @@ def build_argparser() -> argparse.ArgumentParser:
     parser.add_argument("--max-tests", type=int, help="Maximo de pruebas por modulo")
     parser.add_argument("--max-wordlist-entries", type=int, help="Maximo de entradas cargadas por wordlist")
     parser.add_argument("--delay", type=float, help="Delay base entre peticiones HTTP")
-    parser.add_argument("--module-timeout", type=int, help="Timeout por modulo; 0 = sin limite duro")
-    parser.add_argument("--nmap-timeout", type=int, help="Timeout de Nmap; 0 = sin limite duro")
-    parser.add_argument("--nuclei-timeout", type=int, help="Timeout de Nuclei; 0 = sin limite duro")
+    parser.add_argument("--module-timeout", type=int, help="Timeout estricto por modulo en segundos")
+    parser.add_argument("--nmap-timeout", type=int, help="Timeout estricto de Nmap en segundos")
+    parser.add_argument("--nuclei-timeout", type=int, help="Timeout estricto de Nuclei en segundos")
     parser.add_argument("--verify-tls", action="store_true", help="Verificar certificados TLS")
     parser.add_argument("--skip-external", action="store_true", help="Omitir todos los motores externos")
     parser.add_argument("--allow-cloud-ssrf", action="store_true", help="Habilitar pruebas SSRF contra metadata cloud")
@@ -6880,7 +6934,7 @@ def build_argparser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Habilita modo de maxima cobertura: perfil profundo, motores externos, browser audit, "
-            "evidencias PNG, wordlists completas y timeouts sin limite duro"
+            "evidencias PNG, wordlists completas y timeouts estrictos ampliados"
         ),
     )
     parser.add_argument("--enable-browser", action="store_true", help="Forzar auditoria de navegador con Playwright")

@@ -31,6 +31,7 @@ class PublicTemplateTests(unittest.TestCase):
             ROOT / "tools" / "health_check.py",
             ENGINE / "Main.py",
             ENGINE / "modules",
+            ENGINE / "modules" / "status_route_filter.py",
         ]
         for path in required:
             with self.subTest(path=path):
@@ -115,72 +116,35 @@ class PublicTemplateTests(unittest.TestCase):
         self.assertEqual(config.module_test_budget("lfi"), 1200)
         self.assertEqual(config.module_test_budget("xss"), 1200)
         self.assertEqual(config.module_test_budget("client_side"), 240)
-        self.assertEqual(config.module_timeout_for("lfi"), 2700)
-        self.assertEqual(config.module_timeout_for("xss"), 2700)
+        self.assertEqual(config.module_timeout_for("lfi"), 600)
+        self.assertEqual(config.module_timeout_for("xss"), 600)
         self.assertEqual(config.adaptive_waf_block_threshold, 6)
         self.assertEqual(config.adaptive_plateau_threshold, 8)
         self.assertGreaterEqual(config.ffuf_max_words, 10000)
         self.assertTrue(config.policy.evidence_cards)
         self.assertTrue(config.policy.browser_evidence)
         self.assertFalse(config.policy.console_screenshots)
-        self.assertEqual(config.nmap_timeout, 0)
-        self.assertEqual(config.nuclei_timeout, 0)
-        self.assertEqual(config.zap_timeout, 0)
-        self.assertEqual(config.zap_spider_timeout, 0)
-        self.assertEqual(config.zap_passive_timeout, 0)
-        self.assertEqual(config.zap_active_timeout, 0)
-        self.assertEqual(config.external_profile_timeout("nmap", "network_vulnerability_scan", 0), 0)
-        self.assertEqual(config.external_profile_timeout("nuclei", "vulnerability_scan", 0), 0)
+        self.assertEqual(config.nmap_timeout, 1800)
+        self.assertEqual(config.nuclei_timeout, 2400)
+        self.assertEqual(config.zap_timeout, 3600)
+        self.assertEqual(config.zap_spider_timeout, 600)
+        self.assertEqual(config.zap_passive_timeout, 600)
+        self.assertEqual(config.zap_active_timeout, 1800)
+        self.assertEqual(config.external_profile_timeout("nmap", "network_vulnerability_scan", 1), 1800)
+        self.assertEqual(config.external_profile_timeout("nuclei", "vulnerability_scan", 1), 1800)
+        expected_external_dir = Path(config.config_data["reporting"]["external_reports_dir"])
+        if not expected_external_dir.is_absolute():
+            expected_external_dir = ROOT / expected_external_dir
+        self.assertEqual(config.external_reports_dir, expected_external_dir)
 
         deep_args = build_argparser().parse_args(["--profile", "deep"])
         deep_config = RuntimeConfig(deep_args)
         self.assertGreaterEqual(deep_config.module_test_budget("lfi"), 10000)
         self.assertGreaterEqual(deep_config.module_test_budget("xss"), 10000)
 
-    def test_recon_sitemap_filters_artifacts_and_builds_tree(self) -> None:
-        from sitemap_manager import ReconSiteMapManager
-
-        with tempfile.TemporaryDirectory() as tmp:
-            manager = ReconSiteMapManager(Path(tmp), "Scan Titan Test")
-            stats = manager.update_target(
-                target="example.test",
-                base_url="https://example.test/",
-                ip="192.0.2.10",
-                timestamp="2026-09-07 08:00:00",
-                recon={
-                    "site_map": [
-                        "https://example.test/#/login",
-                        "script-src data:",
-                        '"*://*.coin-hive.com/lib/*"',
-                    ],
-                    "wordlist_path_hits": [
-                        {
-                            "url": "https://example.test/api/users?id=1",
-                            "status": 200,
-                            "classification": "public_200",
-                            "method": "GET",
-                        },
-                        {
-                            "url": "https://example.test/admin",
-                            "status": 403,
-                            "classification": "forbidden",
-                            "method": "GET",
-                        },
-                    ],
-                },
-            )
-            payload = json.loads((Path(tmp) / "Recon_Sitemap.json").read_text(encoding="utf-8"))
-            html = (Path(tmp) / "Recon_Sitemap.html").read_text(encoding="utf-8")
-
-        target_map = payload["targets"]["example.test"]
-        routes = {item["route"] for item in target_map["routes"]}
-        self.assertGreaterEqual(stats["routes"], 3)
-        self.assertIn("/#/login", routes)
-        self.assertIn("/api/users", routes)
-        self.assertIn("/admin", routes)
-        self.assertNotIn("script-src data:", html)
-        self.assertNotIn("coin-hive", html)
-        self.assertIn("Site Map del objetivo", html)
+    def test_site_map_module_is_removed(self) -> None:
+        self.assertFalse((ENGINE / "modules" / "site_map.py").exists())
+        self.assertFalse((ENGINE / "sitemap_manager.py").exists())
 
     def test_formal_report_is_generated_with_browser_evidence_field(self) -> None:
         from Main import Finding, ReportWriter, Target

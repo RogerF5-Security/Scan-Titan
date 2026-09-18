@@ -2,8 +2,6 @@
 
 Scan Titan es un motor zero-touch de reconocimiento y orquestacion de vulnerabilidades para auditorias autorizadas. Lee objetivos, ejecuta modulos asincronos internos, integra motores externos cuando estan disponibles, deduplica hallazgos y genera evidencia operativa sin preguntas interactivas.
 
-El ecosistema comunitario tambien incluye la [extension Scan Titan para Google Chrome](https://chromewebstore.google.com/detail/scan-titan/epdbmbbfkmmhkfcfhlpncfkehgcaldcb), que complementa el reconocimiento y los flujos de evaluacion web desde el navegador.
-
 La ejecucion estandar conserva wordlists amplias para descubrimiento, pero LFI y XSS usan presupuestos adaptativos: primero priorizan parametros observados y senales de reflexion y solo despues escalan payloads. El modo `--full` mantiene el perfil exhaustivo. Tambien genera tarjetas PNG de evidencia para hallazgos reportables y captura evidencia de navegador cuando Playwright esta disponible.
 
 ## Estructura
@@ -64,7 +62,7 @@ python .\main.py -Full
 python .\main.py -full
 ```
 
-El modo full activa perfil profundo, motores externos, auditoria de navegador, tarjetas de evidencia y wordlists completas. Nmap, Nuclei, ZAP y los modulos internos no tienen limite duro de tiempo cuando su timeout esta en `0`; Scan Titan mantiene heartbeat y telemetria para confirmar actividad.
+El modo full activa perfil profundo, motores externos, auditoria de navegador, tarjetas de evidencia y wordlists completas. Conserva limites estrictos ampliados para modulos y herramientas externas: un timeout cancela y drena el componente, registra el salto y permite continuar el pipeline.
 
 ## Control de Ejecucion
 
@@ -91,9 +89,9 @@ Para monitorear otra carpeta copiada:
 python .\main.py --monitor --path C:\Ruta\A\OtroEscaneo
 ```
 
-El monitor detecta la telemetria en `audit_reports/` o `reports/` y respeta las rutas de entorno del escaneo. Si pasan mas de 60 segundos sin actualizacion, muestra `SIN ACTUALIZAR`; un porcentaje antiguo no confirma que el proceso siga avanzando.
+El monitor detecta la telemetria en `audit_reports/` o `reports/` y respeta las rutas de entorno del escaneo. La GUI muestra CPU, RAM RSS, cantidad de procesos y detalle por PID para el arbol exclusivo de Scan Titan, incluidos hijos como Nmap, Nuclei y ZAP. La CLI emite la misma muestra cada diez segundos. No se mezcla consumo global del sistema. Si pasan mas de 60 segundos sin actualizacion, muestra `SIN ACTUALIZAR`; un porcentaje antiguo no confirma que el proceso siga avanzando.
 
-LFI, XSS, SSRF y fuzzing de rutas usan un grupo de hasta 20 trabajadores. Los contadores avanzan al terminar cada intento, y cada 15 segundos se informa de peticiones HTTP terminadas, activas y en espera. En zero-touch, LFI prioriza parametros de archivo/ruta observados y usa una muestra corta de alta senal cuando no existen. XSS ejecuta primero marcadores inocuos de reflexion y envia payloads activos solo a entradas que realmente reflejan contenido. Ambos tienen un presupuesto maximo de 1,200 pruebas y un limite de 45 minutos; normalmente terminan antes por descarte adaptativo. `F` evita consumir toda la cola pendiente antes de finalizar. Las mejoras requieren reiniciar ejecuciones iniciadas con versiones anteriores.
+LFI, XSS, SSRF y fuzzing de rutas usan un grupo de hasta 20 trabajadores. Cada prueba tiene timeout propio; una prueba bloqueada se cancela y queda en `timeout_skips` sin detener las restantes. Los contadores avanzan al terminar cada intento, y cada 15 segundos se informa de peticiones HTTP terminadas, activas y en espera. En zero-touch, LFI prioriza parametros de archivo/ruta observados y usa una muestra corta de alta senal cuando no existen. XSS ejecuta primero marcadores inocuos de reflexion y envia payloads activos solo a entradas que realmente reflejan contenido. LFI y XSS tienen un presupuesto maximo de 1,200 pruebas y un limite de 10 minutos por modulo; normalmente terminan antes por descarte adaptativo. `F` evita consumir toda la cola pendiente antes de finalizar.
 
 LFI y XSS incorporan un cortacircuito de respuestas. Se comparan codigo HTTP, tamano, tipo de contenido y huella normalizada del cuerpo. Seis respuestas de bloqueo WAF equivalentes detienen el modulo; ocho respuestas estables sin variacion detienen solo el endpoint/parametro afectado. Los umbrales `adaptive_waf_block_threshold` y `adaptive_plateau_threshold` son configurables. La razon queda visible en el monitor y en la columna `Cortes Adaptativos` de la matriz de reconocimiento.
 
@@ -118,8 +116,6 @@ Salidas principales:
 <salida>/scan_titan_runtime.json
 <salida>/Recon_Matrix.xlsx
 <salida>/Recon_Dashboard.html
-<salida>/Recon_Sitemap.json
-<salida>/Recon_Sitemap.html
 <salida>/Daily_vulns_report.html
 <salida>/Formal_Audit_Report_<YYYY-MM-DD>.html
 <salida>/Formal_Audit_Report_Latest.html
@@ -132,6 +128,8 @@ Salidas principales:
 
 El reporte formal incluye portada, resumen ejecutivo, objetivos evaluados, totales por severidad, detalle tecnico de hallazgos, comando de validacion manual, datos First Seen / Last Seen, enlaces a tarjetas de evidencia y capturas de navegador cuando existan.
 
+Los outputs crudos `.json`, `.jsonl` y `.xml` de ZAP, wafw00f, Nuclei y Nmap se escriben al finalizar cada perfil en el directorio central configurado por `reporting.external_reports_dir`. `config/config.local.yaml`, ignorado por Git, puede sobrescribir la ruta pública para cada estación de trabajo; `external_tools.log` conserva la ruta absoluta de cada export.
+
 ## Reconocimiento
 
 La inteligencia de superficie no se mezcla con vulnerabilidades. Se guarda en:
@@ -139,13 +137,12 @@ La inteligencia de superficie no se mezcla con vulnerabilidades. Se guarda en:
 ```text
 <salida>/Recon_Matrix.xlsx
 <salida>/Recon_Dashboard.html
-<salida>/Recon_Sitemap.html
 <salida>/Daily_vulns_report.html
 ```
 
 El dashboard diario incluye una seccion propia de Reconocimiento por objetivo con tecnologias, puertos, rutas, headers, cookies, subdominios, WhatWeb y perfil WAF/CDN.
 
-`Recon_Sitemap.html` presenta un mapa jerarquico tipo Burp/ZAP por objetivo. Agrupa rutas internas, endpoints, rutas SPA, redirects, estados HTTP, parametros y fuente de descubrimiento para revisar la estructura de la aplicacion sin mezclar inteligencia de superficie con vulnerabilidades.
+`status_route_filter` sustituye el modulo de Site Map. Procesa rutas del mismo origen con un pool asincrono acotado y entrega en `raw_routes` unicamente paths crudos cuya respuesta directa fue HTTP `200` o `403`; no genera findings ni mezcla redirects, errores o metadatos en esa lista.
 
 ## Herramientas Externas
 

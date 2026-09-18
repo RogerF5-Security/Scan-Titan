@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import json
+import inspect
 import sys
 import tempfile
 import unittest
@@ -40,6 +41,7 @@ def external_tools(**overrides) -> ExternalTools:
         "nuclei_disable_host_error_skip": True,
         "nuclei_max_seed_urls": 60,
         "nuclei_templates_path": "missing-nuclei-templates",
+        "external_reports_dir": ROOT / "reports" / "external reports",
     }
     values.update(overrides)
     return ExternalTools(SimpleNamespace(**values))
@@ -70,7 +72,7 @@ class ExternalToolHotfixTests(unittest.TestCase):
                     {"url": "https://fac.claro.com.gt/api/Quantitys", "params": []},
                     {"url": "https://evil.example/api", "params": []},
                 ],
-                "site_map": ["/login/?next=/", "/login/?next=/"],
+                "raw_routes": ["/login/?next=/", "/login/?next=/"],
                 "discovered_paths": ["/static/app.css (200 public_200)"],
             },
         )
@@ -82,9 +84,9 @@ class ExternalToolHotfixTests(unittest.TestCase):
         self.assertFalse(any(url.endswith(".css") for url in seeds))
 
     def test_every_nuclei_profile_uses_resolver_guard_target_list_and_jsonl(self) -> None:
-        tools = external_tools()
         ctx = SimpleNamespace(target=target(), recon={"endpoints": [{"url": "https://fac.claro.com.gt/login/"}]})
         with tempfile.TemporaryDirectory() as tmp, patch.object(titan_main, "REPORTS_DIR", Path(tmp)):
+            tools = external_tools(external_reports_dir=Path(tmp) / "external reports")
             profiles = tools._nuclei_profiles("nuclei", ctx)
             for name, command, output in profiles:
                 with self.subTest(profile=name):
@@ -99,6 +101,30 @@ class ExternalToolHotfixTests(unittest.TestCase):
             self.assertIn("info", severity.split(","))
             target_list = Path(profiles[0][1][profiles[0][1].index("-l") + 1])
             self.assertIn("https://fac.claro.com.gt/login/", target_list.read_text(encoding="utf-8"))
+
+    def test_required_raw_external_outputs_use_central_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            destination = Path(tmp) / "external reports"
+            tools = external_tools(external_reports_dir=destination)
+            for filename in (
+                "zap_alerts_demo.json",
+                "wafw00f_out_demo.json",
+                "nmap_out_demo.xml",
+                "nuclei_out_demo.jsonl",
+            ):
+                path = tools._external_report_path("fixture", filename)
+                self.assertEqual(path.parent, destination)
+            self.assertTrue(destination.is_dir())
+
+        source_checks = {
+            tools.run_zap: 'self._external_report_path("zap"',
+            tools.run_wafw00f: 'self._external_report_path("wafw00f"',
+            tools.run_nmap: 'self._external_report_path("nmap"',
+            tools._nuclei_profiles: 'self._external_report_path("nuclei"',
+        }
+        for method, marker in source_checks.items():
+            with self.subTest(method=method.__name__):
+                self.assertIn(marker, inspect.getsource(method))
 
     def test_nuclei_empty_reasons_are_distinct(self) -> None:
         tools = external_tools()

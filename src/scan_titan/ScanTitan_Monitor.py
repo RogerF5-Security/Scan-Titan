@@ -257,6 +257,9 @@ class MonitorApp(tk.Tk):
             "tests": tk.StringVar(value="-"),
             "findings": tk.StringVar(value="-"),
             "elapsed": tk.StringVar(value="-"),
+            "cpu": tk.StringVar(value="-"),
+            "ram": tk.StringVar(value="-"),
+            "processes": tk.StringVar(value="-"),
         }
         self._metric_card(cards, "Target", self.metric_vars["target"]).grid(row=0, column=0, sticky="ew", padx=(0, 8))
         self._metric_card(cards, "Fase", self.metric_vars["phase"]).grid(row=0, column=1, sticky="ew", padx=8)
@@ -264,6 +267,9 @@ class MonitorApp(tk.Tk):
         self._metric_card(cards, "Pruebas / Hits", self.metric_vars["tests"]).grid(row=0, column=3, sticky="ew", padx=8)
         self._metric_card(cards, "Vulns unicas / ocurrencias", self.metric_vars["findings"]).grid(row=0, column=4, sticky="ew", padx=8)
         self._metric_card(cards, "Tiempo", self.metric_vars["elapsed"]).grid(row=0, column=5, sticky="ew", padx=(8, 0))
+        self._metric_card(cards, "CPU proceso + hijos", self.metric_vars["cpu"]).grid(row=1, column=0, columnspan=2, sticky="ew", padx=(0, 8), pady=(8, 0))
+        self._metric_card(cards, "RAM RSS proceso + hijos", self.metric_vars["ram"]).grid(row=1, column=2, columnspan=2, sticky="ew", padx=8, pady=(8, 0))
+        self._metric_card(cards, "Arbol de procesos", self.metric_vars["processes"]).grid(row=1, column=4, columnspan=2, sticky="ew", padx=(8, 0), pady=(8, 0))
         for index in range(6):
             cards.columnconfigure(index, weight=1, uniform="cards")
 
@@ -297,7 +303,12 @@ class MonitorApp(tk.Tk):
             ("time", "level", "message"),
             ("Hora", "Nivel", "Mensaje"),
         )
-        for tree in (self.modules_tree, self.external_tree, self.findings_tree, self.events_tree):
+        self.resources_tree = self._tree(
+            "Recursos por proceso",
+            ("pid", "name", "cpu", "ram"),
+            ("PID", "Proceso", "CPU %", "RAM MB"),
+        )
+        for tree in (self.modules_tree, self.external_tree, self.findings_tree, self.events_tree, self.resources_tree):
             self._configure_columns(tree)
 
         self.footer_var = tk.StringVar(value="Esperando telemetria...")
@@ -371,6 +382,10 @@ class MonitorApp(tk.Tk):
             "fingerprint": 145,
             "level": 80,
             "message": 760,
+            "pid": 90,
+            "name": 280,
+            "cpu": 100,
+            "ram": 120,
         }
         for column in tree["columns"]:
             tree.column(column, width=widths.get(column, 120), minwidth=60, stretch=True)
@@ -447,6 +462,9 @@ class MonitorApp(tk.Tk):
             else ""
         )
         self.metric_vars["elapsed"].set(update_age_text(elapsed_source))
+        self.metric_vars["cpu"].set("-")
+        self.metric_vars["ram"].set("-")
+        self.metric_vars["processes"].set("-")
         if isinstance(report_data.get("summary"), dict):
             counts = report_data.get("summary", {})
         elif state:
@@ -461,6 +479,7 @@ class MonitorApp(tk.Tk):
         self._replace_rows(self.external_tree, external_rows)
         self._replace_rows(self.findings_tree, finding_rows)
         self._replace_rows(self.events_tree, event_rows)
+        self._replace_rows(self.resources_tree, [])
         if latest_report or external_rows or state:
             self.footer_var.set(
                 f"Modo fallback activo | Runtime ausente: {self.runtime_file} | "
@@ -504,6 +523,23 @@ class MonitorApp(tk.Tk):
         if started and data.get("status") in {"running", "paused", "finishing"}:
             elapsed = (datetime.now() - started).total_seconds()
         self.metric_vars["elapsed"].set(format_seconds(elapsed))
+        resources = data.get("resources") if isinstance(data.get("resources"), dict) else {}
+        peaks = data.get("resource_peaks") if isinstance(data.get("resource_peaks"), dict) else {}
+        if resources.get("available"):
+            self.metric_vars["cpu"].set(
+                f"{float(resources.get('cpu_percent') or 0.0):.1f}%\nPico {float(peaks.get('cpu_percent') or 0.0):.1f}%"
+            )
+            self.metric_vars["ram"].set(
+                f"{float(resources.get('ram_mb') or 0.0):.1f} MB\nPico {float(peaks.get('ram_mb') or 0.0):.1f} MB"
+            )
+            self.metric_vars["processes"].set(
+                f"{int(resources.get('process_count') or 0)} total\n{int(resources.get('child_process_count') or 0)} hijos"
+            )
+        else:
+            detail = safe_text(resources.get("error") or "sin muestra", 80)
+            self.metric_vars["cpu"].set("N/D")
+            self.metric_vars["ram"].set("N/D")
+            self.metric_vars["processes"].set(detail)
 
         self._replace_rows(
             self.modules_tree,
@@ -563,6 +599,19 @@ class MonitorApp(tk.Tk):
                     safe_text(item.get("message"), 680),
                 )
                 for item in data.get("events", []) or []
+                if isinstance(item, dict)
+            ],
+        )
+        self._replace_rows(
+            self.resources_tree,
+            [
+                (
+                    str(item.get("pid", "")),
+                    safe_text(item.get("name"), 120),
+                    f"{float(item.get('cpu_percent') or 0.0):.1f}",
+                    f"{float(item.get('ram_mb') or 0.0):.1f}",
+                )
+                for item in resources.get("processes", []) or []
                 if isinstance(item, dict)
             ],
         )
@@ -738,11 +787,13 @@ def run_self_test() -> int:
         "external_tools": [{"tool": "nmap", "profile": "service_top_1000", "status": "finished"}],
         "recent_findings": [{"severity": "High", "title": "demo"}],
         "events": [{"level": "INFO", "message": "demo"}],
+        "resources": {"available": True, "cpu_percent": 12.5, "ram_mb": 256.0, "process_count": 3},
     }
     assert abs(float(sample["global_percent"]) - 51.5) < 0.01
     assert sample["findings"]["High"] == 2
     assert format_seconds(3661) == "1h 01m 01s"
     assert safe_text("a\nb") == "a b"
+    assert sample["resources"]["process_count"] == 3
     print("SCAN_TITAN_MONITOR_SELFTEST_OK")
     return 0
 

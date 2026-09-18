@@ -27,7 +27,9 @@ scan:
   route_jitter_min_seconds: 0.5
   route_jitter_max_seconds: 1.5
   route_throttle_batch_size: 10
-  module_timeout_seconds: 0
+  # Hard ceiling for every intelligent module. A timeout skips only that
+  # module, records the reason, drains its workers, and continues the pipeline.
+  module_timeout_seconds: 900
   max_pages: 120
   max_depth: 3
   max_tests_per_module: 10000
@@ -36,7 +38,7 @@ scan:
     recon_surface: 10000
     api_spa: 10000
     api_dast: 10000
-    site_map: 120
+    status_route_filter: 240
     unauthenticated_map: 10000
     path_discovery: 10000
     headers: 120
@@ -56,20 +58,27 @@ scan:
     browser_audit: 120
     advanced_logic: 220
   module_timeout_overrides:
-    recon_surface: 0
-    api_spa: 0
-    api_dast: 0
-    site_map: 0
-    unauthenticated_map: 0
-    path_discovery: 0
-    sqli: 0
-    lfi: 2700
-    ssrf: 0
-    injection: 0
-    xss: 2700
-    waf_resilience: 0
-    client_side: 1200
-    browser_audit: 0
+    recon_surface: 600
+    api_spa: 300
+    api_dast: 600
+    status_route_filter: 180
+    unauthenticated_map: 900
+    path_discovery: 900
+    headers: 120
+    infra_network: 180
+    crypto_tls: 180
+    auth_session: 600
+    authorization: 600
+    sqli: 1200
+    lfi: 600
+    ssrf: 600
+    injection: 900
+    xss: 600
+    cors: 120
+    waf_resilience: 600
+    client_side: 600
+    browser_audit: 300
+    advanced_logic: 300
   module_throttle_overrides:
     sqli:
       delay_seconds: 0.0
@@ -142,17 +151,17 @@ tools:
   nmap:
     enabled: true
     binary: nmap
-    timeout_seconds: 0
+    timeout_seconds: 1800
     profiles:
       - network_vulnerability_scan
       - ssl_tls_surface
       - http_slowloris_check
       - vulners_cvss
     profile_timeouts:
-      network_vulnerability_scan: 0
-      ssl_tls_surface: 0
-      http_slowloris_check: 0
-      vulners_cvss: 0
+      network_vulnerability_scan: 1800
+      ssl_tls_surface: 480
+      http_slowloris_check: 600
+      vulners_cvss: 900
   ffuf:
     enabled: true
     binary: ffuf
@@ -189,15 +198,15 @@ tools:
     max_seed_urls: 60
     retries: 1
     request_timeout_seconds: 10
-    timeout_seconds: 0
+    timeout_seconds: 2400
     profiles:
       - vulnerability_scan
       - conservative_scan
       - cve_scan
     profile_timeouts:
-      vulnerability_scan: 0
-      conservative_scan: 0
-      cve_scan: 0
+      vulnerability_scan: 1800
+      conservative_scan: 1200
+      cve_scan: 1200
   zap:
     enabled: true
     binary: zap.bat
@@ -209,10 +218,10 @@ tools:
     host: 127.0.0.1
     port: 8090
     startup_timeout_seconds: 90
-    timeout_seconds: 0
-    spider_timeout_seconds: 0
-    passive_timeout_seconds: 0
-    active_timeout_seconds: 0
+    timeout_seconds: 3600
+    spider_timeout_seconds: 600
+    passive_timeout_seconds: 600
+    active_timeout_seconds: 1800
     max_seed_urls: 60
     max_alerts: 250
     max_children: 20
@@ -268,6 +277,7 @@ exposed_files:
 
 reporting:
   formats: [json, html, markdown, txt]
+  external_reports_dir: 'audit_reports/external reports'
   include_legacy_catalog: true
   min_severity: Low
   include_recon_info_findings: false

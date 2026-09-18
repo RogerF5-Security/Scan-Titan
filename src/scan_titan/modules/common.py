@@ -1110,17 +1110,39 @@ async def run_bounded(
     *,
     limit: int = 20,
     should_stop: Callable[[], bool] | None = None,
-) -> None:
-    """Consume probes with a fixed worker pool, without queuing a task per payload."""
+    item_timeout: float | None = None,
+    on_timeout: Callable[[_Item, float], None] | None = None,
+) -> dict[str, int]:
+    """Run probes in a bounded pool and isolate individual timeouts.
+
+    A probe that exceeds ``item_timeout`` is cancelled and counted as skipped;
+    the remaining workers continue draining the iterator.  The worker tasks are
+    always cancelled and awaited when the caller is cancelled (for example by a
+    module-level timeout), so a timed-out module cannot leave background probes
+    running against the target.
+    """
     iterator = iter(items)
+    stats = {"completed": 0, "timed_out": 0, "skipped": 0}
 
     async def worker() -> None:
-        while not (should_stop and should_stop()):
+        while True:
+            if should_stop and should_stop():
+                stats["skipped"] += 1
+                return
             try:
                 item = next(iterator)
             except StopIteration:
                 return
-            await probe(item)
+            try:
+                if item_timeout is not None and item_timeout > 0:
+                    await asyncio.wait_for(probe(item), timeout=float(item_timeout))
+                else:
+                    await probe(item)
+                stats["completed"] += 1
+            except asyncio.TimeoutError:
+                stats["timed_out"] += 1
+                if on_timeout:
+                    on_timeout(item, float(item_timeout or 0.0))
 
     workers = [asyncio.create_task(worker()) for _ in range(max(1, min(20, limit)))]
     try:
@@ -1130,6 +1152,21 @@ async def run_bounded(
             if not task.done():
                 task.cancel()
         await asyncio.gather(*workers, return_exceptions=True)
+    return stats
+
+
+def record_probe_timeout(ctx: "ScanContext", module: str, item: Any, seconds: float) -> None:
+    """Persist a bounded-probe skip without converting it into a vulnerability."""
+    record = {
+        "module": str(module),
+        "item": clean_text(item, 220),
+        "reason": "probe_timeout",
+        "timeout_seconds": round(float(seconds or 0.0), 2),
+    }
+    skips = ctx.recon.setdefault("timeout_skips", [])
+    if isinstance(skips, list) and len(skips) < 500:
+        skips.append(record)
+    ctx.heartbeat(str(module), f"prueba omitida por timeout ({seconds:.1f}s)", 0, 0)
 
 
 class AsyncHttpClient:

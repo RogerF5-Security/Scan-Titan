@@ -4,6 +4,23 @@ Este archivo registra los cambios funcionales verificables de cada version.
 
 Las versiones `21.3.2` y `21.3.3` documentan iteraciones locales verificadas que se consolidaron en `22.0.0`; no se publicaron como tags independientes.
 
+## [22.1.0] - 2026-09-18
+
+### Estabilidad y observabilidad
+
+- Las pruebas inteligentes usan pools concurrentes acotados y timeouts estrictos por prueba y por modulo; un timeout se registra y no bloquea la ejecucion global.
+- Se elimina el modulo de site map y se sustituye por un filtro concurrente que entrega rutas crudas del mismo origen con estado HTTP 200 o 403.
+- La telemetria agrega CPU, RAM, E/S y numero de procesos del proceso principal y todos sus hijos mediante `psutil`, tanto en CLI como en el monitor grafico.
+
+### Evidencia y publicacion
+
+- Los artefactos crudos de Nmap, Nuclei, OWASP ZAP y wafw00f se centralizan en el directorio externo configurado.
+- La presentacion publica incorpora un emblema original, flujo interactivo para charlas tecnicas y ejemplos alineados con el filtro de rutas 200/403.
+
+### Validacion
+
+- Se agregan regresiones para aislamiento de timeouts, cancelacion limpia, filtro de rutas, arbol de procesos, enrutamiento de salidas externas y contrato de la web publica.
+
 ## [22.0.1] - 2026-09-09
 
 ### Cobertura de herramientas externas
@@ -89,5 +106,6 @@ Las versiones `21.3.2` y `21.3.3` documentan iteraciones locales verificadas que
 - El monitor marca como desactualizado un estado `running` sin actividad reciente y resuelve correctamente la carpeta de runtime de cada copia.
 - La finalizacion ordenada interrumpe colas y pausas pendientes antes de generar los reportes disponibles.
 
+[22.1.0]: https://github.com/RogerF5-Security/Scan-Titan/releases/tag/v22.1.0
 [22.0.1]: https://github.com/RogerF5-Security/Scan-Titan/releases/tag/v22.0.1
 [22.0.0]: https://github.com/RogerF5-Security/Scan-Titan/releases/tag/v22.0.0

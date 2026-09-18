@@ -2,7 +2,7 @@
 
 Motor comunitario de auditoria automatizada en Python: reconocimiento, pruebas web, orquestacion de herramientas externas y reportes de vulnerabilidades para profesionales y equipos de seguridad de cualquier region.
 
-**Version del motor:** 22.0.1. **Estado:** repositorio publico. [Web de Scan Titan](https://rogerf5-security.github.io/Scan-Titan/).
+**Version del motor:** 22.1.0. **Estado:** repositorio publico. [Web de Scan Titan](https://rogerf5-security.github.io/Scan-Titan/).
 
 ## Extension para Chrome
 
@@ -48,7 +48,8 @@ La plantilla contiene ejemplos comentados. Una vez definidos los objetivos, el e
 - Reconocimiento de tecnologias, puertos, rutas, APIs y aplicaciones SPA.
 - Integracion de Nmap, Nuclei, OWASP ZAP, WhatWeb, wafw00f, ffuf y subfinder cuando estan instalados.
 - Modulos de auditoria HTTP, TLS, autenticacion, autorizacion e inyecciones.
-- Matriz Excel, mapa del sitio desplegable y reconocimiento organizado por objetivo.
+- Telemetria aislada de CPU y RAM para Scan Titan y todos sus procesos hijos.
+- Matriz Excel y lista raw de rutas HTTP `200/403` organizada por objetivo.
 - Deduplicacion de hallazgos, comandos de validacion manual y evidencias de navegador.
 - Dashboard diario e informe formal HTML con portada y detalle de hallazgos.
 
@@ -65,7 +66,7 @@ Los resultados requieren valorar su evidencia y confianza. Una prueba automatiza
 | `python main.py --health-check` | Comprobar estructura, dependencias y herramientas |
 | `python main.py --help` | Opciones disponibles |
 
-En Windows: `P` pausa, `R` reanuda, `F` finaliza y genera los reportes con lo encontrado; `Ctrl+C` interrumpe. Los procesos configurados con timeout `0` no tienen limite global de duracion y muestran actividad periodica. Las peticiones individuales conservan sus limites.
+En Windows: `P` pausa, `R` reanuda, `F` finaliza y genera los reportes con lo encontrado; `Ctrl+C` interrumpe. Cada modulo, prueba HTTP y perfil externo tiene un timeout estricto. Un timeout se registra como salto, cancela los workers pendientes del componente y permite continuar el pipeline.
 
 ## Reportes
 
@@ -74,8 +75,10 @@ El lanzador incluido escribe por defecto en `audit_reports/`:
 - `Daily_vulns_report.html`: dashboard de vulnerabilidades.
 - `Formal_Audit_Report_Latest.html`: informe formal mas reciente.
 - `Recon_Matrix.xlsx`: matriz de reconocimiento.
-- `Recon_Sitemap.html`: arbol de rutas por objetivo.
+- `Recon_Matrix.xlsx`: incluye la lista raw de rutas que respondieron exclusivamente `200` o `403`.
 - `External_Tools_Observability.html`: estado de herramientas externas.
+
+Los archivos crudos de ZAP, wafw00f, Nuclei y Nmap se escriben en el directorio definido por `reporting.external_reports_dir`. La configuración pública usa `audit_reports/external reports`; una instalación puede sobrescribirla de forma automática mediante el archivo privado e ignorado por Git `config/config.local.yaml`.
 
 Los reportes, sesiones y evidencias permanecen locales y estan excluidos de Git. El archivo versionado `targets/targets.txt` debe conservarse sin objetivos reales en los commits; `.gitignore` no oculta cambios de archivos que ya estan versionados.
 

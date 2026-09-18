@@ -12,6 +12,7 @@ from .common import (
     ScanContext,
     VulnerabilityModule,
     is_soft_auth_redirect,
+    record_probe_timeout,
     run_bounded,
     soft_auth_redirect_reason,
 )
@@ -152,7 +153,12 @@ class PathDiscoveryModule(VulnerabilityModule):
                         findings.append(bypass)
 
         await run_bounded(
-            paths[:ctx.limits.max_tests_per_module], probe, should_stop=ctx.should_stop,
+            paths[:ctx.limits.max_tests_per_module],
+            probe,
+            limit=12,
+            should_stop=ctx.should_stop,
+            item_timeout=max(30.0, float(ctx.limits.timeout) * 6.0),
+            on_timeout=lambda item, seconds: record_probe_timeout(ctx, self.name, item, seconds),
         )
         ctx.recon["wordlist_path_hits"] = list(
             ctx.recon.get("wordlist_path_hits", []) + sorted(wordlist_hits, key=lambda item: (item["status"], item["path"]))
