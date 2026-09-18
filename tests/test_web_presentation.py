@@ -6,7 +6,6 @@ from urllib.parse import unquote, urlsplit
 
 
 WEB = Path(__file__).resolve().parents[1] / "docs" / "web"
-CHROME_EXTENSION = "https://chromewebstore.google.com/detail/scan-titan/epdbmbbfkmmhkfcfhlpncfkehgcaldcb"
 
 
 class Page(HTMLParser):
@@ -34,7 +33,6 @@ class PublicWebsiteTests(unittest.TestCase):
             self.assertLess(path.stat().st_size, 1_000_000, path.name)
         index = (WEB / "index.html").read_text(encoding="utf-8")
         self.assertIn('href="https://rogerf5-security.github.io/Scan-Titan/"', index)
-        self.assertIn(f'href="{CHROME_EXTENSION}"', index)
 
     def test_assets_and_local_links_resolve_inside_website(self):
         for path in WEB.glob("*.html"):
@@ -65,6 +63,21 @@ class PublicWebsiteTests(unittest.TestCase):
                 self.assertIn("alt", attrs)
                 self.assertIn("width", attrs)
                 self.assertIn("height", attrs)
+
+    def test_brand_and_interactive_workflow_are_packaged(self):
+        index = (WEB / "index.html").read_text(encoding="utf-8")
+        script = (WEB / "app.js").read_text(encoding="utf-8")
+        logo = WEB / "media" / "scan-titan-logo.png"
+        self.assertTrue(logo.is_file())
+        self.assertGreater(logo.stat().st_size, 20_000)
+        self.assertIn('class="hero-logo"', index)
+        self.assertIn("data-workflow", index)
+        self.assertEqual(index.count("data-flow-step="), 4)
+        self.assertIn('id="flow-toggle"', index)
+        self.assertIn("window.setInterval", script)
+        self.assertIn("prefers-reduced-motion", script)
+        self.assertNotIn("Recon_Sitemap.html", index)
+        self.assertNotIn('id="tab-sitemap"', index)
 
     def test_no_remote_runtime_or_private_audit_data(self):
         for path in WEB.rglob("*"):

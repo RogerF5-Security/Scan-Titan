@@ -32,6 +32,7 @@
     <link rel="canonical" href="https://rogerf5-security.github.io/Scan-Titan/" />
     <link rel="icon" href="media/favicon.png" type="image/png" />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="preload" href="media/scan-titan-logo.png" as="image" />
     <link rel="preload" href="media/terminal.png" as="image" />
     <script src="app.js" defer></script>
     <title>Scan Titan | Auditoría automatizada con evidencia</title>
@@ -41,8 +42,13 @@
     <header class="header">
       <nav class="container nav" aria-label="Navegación principal">
         <a href="#inicio" class="brand" aria-label="Scan Titan, inicio"
-          ><span class="brand-mark" aria-hidden="true">ST<span>_</span></span
-          ><span>SCAN TITAN</span></a
+          ><img
+            class="brand-logo"
+            src="media/scan-titan-logo.png"
+            width="42"
+            height="42"
+            alt=""
+          /><span>SCAN TITAN</span></a
         >
         <button
           class="menu-toggle icon-button"
@@ -78,6 +84,14 @@
           alt="Ejemplo ficticio del flujo de consola de Scan Titan: reconocimiento, comprobaciones y generación de evidencia"
           fetchpriority="high"
         />
+        <img
+          class="hero-logo"
+          src="media/scan-titan-logo.png"
+          width="768"
+          height="768"
+          alt="Emblema original de Scan Titan: un titán cibernético acorazado irrumpe a través de una muralla digital"
+          fetchpriority="high"
+        />
         <div class="container hero-inner">
           <div class="hero-top">
             <span class="micro"
@@ -93,8 +107,7 @@
             <p class="hero-subtitle">De la superficie<br />a la evidencia.</p>
             <p class="hero-description">
               Una sola ejecución. Reconocimiento, pruebas web y herramientas
-              especializadas conectadas en un flujo de auditoría trazable para
-              una comunidad global de profesionales y equipos de seguridad.
+              especializadas conectadas en un flujo de auditoría trazable.
             </p>
             <div class="actions">
               <a class="button button-red" href="#proceso"
@@ -106,12 +119,6 @@
                   alt="" /></a
               ><a class="text-link" href="#resultados"
                 >Ver los resultados <span aria-hidden="true">↗</span></a
-              ><a
-                class="text-link"
-                href="https://chromewebstore.google.com/detail/scan-titan/epdbmbbfkmmhkfcfhlpncfkehgcaldcb"
-                target="_blank"
-                rel="noopener noreferrer"
-                >Extensión Chrome <span aria-hidden="true">↗</span></a
               >
             </div>
           </div>
@@ -147,43 +154,42 @@
               origen, evidencia y contexto.
             </p>
           </div>
-          <div class="pipeline" aria-label="Etapas de la auditoría">
-            <article>
-              <span class="step-number">01</span>
-              <h3>Definir</h3>
-              <p>
-                Objetivos y política de ejecución desde archivos locales.
-                Perfiles y límites explícitos.
-              </p>
-              <code>targets + config</code>
-            </article>
-            <article>
-              <span class="step-number">02</span>
-              <h3>Descubrir</h3>
-              <p>
-                Tecnologías, puertos, rutas y APIs. El reconocimiento construye
-                el inventario del objetivo.
-              </p>
-              <code>superficie + contexto</code>
-            </article>
-            <article>
-              <span class="step-number">03</span>
-              <h3>Comprobar</h3>
-              <p>
-                Módulos web y motores externos. Pruebas acotadas y contraste de
-                respuestas para reducir ruido.
-              </p>
-              <code>DAST + integraciones</code>
-            </article>
-            <article>
-              <span class="step-number">04</span>
-              <h3>Documentar</h3>
-              <p>
-                Deduplicación, evidencia y comandos de validación. Informes
-                separados del reconocimiento.
-              </p>
-              <code>hallazgos + reportes</code>
-            </article>
+          <div class="workflow-shell" data-workflow>
+            <div class="workflow-stages" role="list" aria-label="Flujo interactivo de Scan Titan">
+              <button class="workflow-stage is-active" type="button" data-flow-step="0" aria-current="step">
+                <span>01</span><strong>Reconocimiento</strong><small>Superficie y servicios</small>
+              </button>
+              <button class="workflow-stage" type="button" data-flow-step="1">
+                <span>02</span><strong>Rutas válidas</strong><small>Solo HTTP 200 / 403</small>
+              </button>
+              <button class="workflow-stage" type="button" data-flow-step="2">
+                <span>03</span><strong>Pruebas inteligentes</strong><small>Concurrencia acotada</small>
+              </button>
+              <button class="workflow-stage" type="button" data-flow-step="3">
+                <span>04</span><strong>Reporte</strong><small>Evidencia trazable</small>
+              </button>
+            </div>
+            <div class="workflow-console" role="region" aria-live="polite" aria-label="Estado simulado del flujo">
+              <div class="console-bar">
+                <span><i></i> SCAN TITAN / PIPELINE</span>
+                <button id="flow-toggle" type="button" aria-pressed="false">PAUSAR AUTOPLAY</button>
+              </div>
+              <div class="console-stage">
+                <span id="flow-kicker">ETAPA 01 · DESCUBRIMIENTO</span>
+                <h3 id="flow-title">Reconocimiento correlacionado</h3>
+                <p id="flow-description">Nmap, WhatWeb, subfinder y el navegador construyen una superficie común antes de iniciar las comprobaciones.</p>
+              </div>
+              <div id="flow-events" class="flow-events" aria-label="Eventos simulados">
+                <code><b>✓</b> 443/tcp abierto · HTTPS</code>
+                <code><b>✓</b> tecnología: nginx + Python</code>
+                <code><b>→</b> superficie normalizada para la siguiente etapa</code>
+              </div>
+              <dl class="flow-metrics">
+                <div><dt>CPU proceso</dt><dd id="flow-cpu">18.4%</dd></div>
+                <div><dt>RAM árbol</dt><dd id="flow-ram">286 MB</dd></div>
+                <div><dt>Estado</dt><dd id="flow-state">DESCUBRIENDO</dd></div>
+              </dl>
+            </div>
           </div>
           <div class="architecture-note">
             <img src="icons/activity.svg" alt="" width="20" height="20" />
@@ -475,7 +481,7 @@
                   </div>
                   <div>
                     <dt>Salida</dt>
-                    <dd>Mapa del sitio y artefactos</dd>
+                    <dd>Rutas HTTP 200/403 y artefactos</dd>
                   </div>
                 </dl>
               </article>
@@ -505,12 +511,12 @@
               <button
                 role="tab"
                 type="button"
-                id="tab-sitemap"
-                aria-controls="panel-sitemap"
+                id="tab-routes"
+                aria-controls="panel-routes"
                 aria-selected="true"
-                data-result="sitemap"
+                data-result="routes"
               >
-                Mapa del sitio</button
+                Rutas 200 / 403</button
               ><button
                 role="tab"
                 type="button"
@@ -539,88 +545,25 @@
           </div>
           <div
             class="result-panel"
-            id="panel-sitemap"
+            id="panel-routes"
             role="tabpanel"
-            aria-labelledby="tab-sitemap"
+            aria-labelledby="tab-routes"
             tabindex="0"
           >
-            <div class="sitemap-layout">
-              <div class="sitemap-tree">
-                <div class="tree-host">
-                  <img
-                    src="icons/network.svg"
-                    alt=""
-                    width="20"
-                    height="20"
-                  /><strong>laboratorio.example</strong><span>HTTPS</span>
+            <div class="route-layout">
+              <div class="raw-route-output">
+                <div class="route-output-header">
+                  <span>RAW_ROUTE_FILTER</span><strong>laboratorio.example</strong>
                 </div>
-                <details open>
-                  <summary>
-                    <img src="icons/folder.svg" alt="" width="17" height="17" />
-                    / <span class="status-code">200</span>
-                  </summary>
-                  <div class="tree-children">
-                    <details open>
-                      <summary>
-                        <img
-                          src="icons/folder.svg"
-                          alt=""
-                          width="17"
-                          height="17"
-                        />
-                        api/
-                      </summary>
-                      <div class="tree-children">
-                        <div class="tree-leaf">
-                          <code>GET</code><span>productos</span
-                          ><span class="status-code">200</span>
-                        </div>
-                        <div class="tree-leaf">
-                          <code>GET</code><span>perfil</span
-                          ><span class="status-code code-locked">401</span>
-                        </div>
-                      </div>
-                    </details>
-                    <details open>
-                      <summary>
-                        <img
-                          src="icons/folder.svg"
-                          alt=""
-                          width="17"
-                          height="17"
-                        />
-                        cuenta/
-                      </summary>
-                      <div class="tree-children">
-                        <div class="tree-leaf">
-                          <code>GET</code><span>login</span
-                          ><span class="status-code">200</span>
-                        </div>
-                      </div>
-                    </details>
-                    <details>
-                      <summary>
-                        <img
-                          src="icons/folder.svg"
-                          alt=""
-                          width="17"
-                          height="17"
-                        />
-                        static/
-                      </summary>
-                      <div class="tree-children">
-                        <div class="tree-leaf">
-                          <code>GET</code><span>app.js</span
-                          ><span class="status-code">200</span>
-                        </div>
-                      </div>
-                    </details>
-                  </div>
-                </details>
+                <div class="route-row"><code>/</code><span class="status-code">200</span></div>
+                <div class="route-row"><code>/api/productos</code><span class="status-code">200</span></div>
+                <div class="route-row"><code>/cuenta/login</code><span class="status-code">200</span></div>
+                <div class="route-row"><code>/admin</code><span class="status-code code-locked">403</span></div>
+                <div class="route-output-footer">4 rutas aceptadas · otros estados descartados</div>
               </div>
               <div class="recon-detail">
                 <span class="label">RECONOCIMIENTO / OBJETIVO</span>
-                <h3>Cada ruta en su lugar.</h3>
+                <h3>Una lista cruda.<br />Dos estados válidos.</h3>
                 <dl class="recon-fields">
                   <div>
                     <dt>Tecnología</dt>
@@ -631,17 +574,17 @@
                     <dd>443/tcp · HTTPS</dd>
                   </div>
                   <div>
-                    <dt>Acceso</dt>
-                    <dd>/api/perfil requiere autenticación</dd>
+                    <dt>Filtro</dt>
+                    <dd>HTTP 200 y 403 exclusivamente</dd>
                   </div>
                   <div>
-                    <dt>Origen</dt>
-                    <dd>Exploración HTTP + navegador</dd>
+                    <dt>Salida</dt>
+                    <dd>Rutas del mismo origen, sin jerarquía artificial</dd>
                   </div>
                 </dl>
                 <p class="note">
-                  Un código 200 no basta: las redirecciones al inicio de sesión
-                  y las páginas de error personalizadas deben contrastarse.
+                  El filtro alimenta las etapas posteriores sin reinstalar el
+                  módulo de site map. Los estados distintos de 200 y 403 se omiten.
                 </p>
               </div>
             </div>
@@ -749,9 +692,9 @@
                     <td>Análisis y filtrado</td>
                   </tr>
                   <tr>
-                    <td>Recon_Sitemap.html</td>
-                    <td>Árbol navegable de endpoints</td>
-                    <td>Exploración de superficie</td>
+                    <td>Raw_Routes_200_403.txt</td>
+                    <td>Lista cruda de rutas válidas</td>
+                    <td>Entrada para pruebas posteriores</td>
                   </tr>
                   <tr>
                     <td>External_Tools_Observability.html</td>
@@ -959,8 +902,9 @@ python main.py</code></pre>
               <p>
                 La orquestación registra actividad, duración, errores y códigos
                 de salida. Los límites de las peticiones se mantienen aunque un
-                proceso externo permita duración global ilimitada. Un latido de
-                proceso no demuestra que todas sus pruebas estén avanzando.
+                proceso externo consuma su presupuesto. Cada prueba y cada motor
+                tienen un timeout finito; el salto queda registrado y la ejecución
+                global continúa.
               </p>
             </details>
             <details>
@@ -979,8 +923,7 @@ python main.py</code></pre>
       <div class="container">
         <div class="footer-top">
           <a class="brand" href="#inicio"
-            ><span class="brand-mark" aria-hidden="true">ST<span>_</span></span
-            ><span>SCAN TITAN</span></a
+            ><img class="brand-logo" src="media/scan-titan-logo.png" width="42" height="42" alt="" /><span>SCAN TITAN</span></a
           >
           <p>
             Construido desde la práctica.<br />Preparado para compartir
