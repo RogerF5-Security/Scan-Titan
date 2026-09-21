@@ -144,7 +144,6 @@ wordlists:
   ssrf: wordlists/ssrf.txt
   ssti: wordlists/ssti.txt
   xss: wordlists/xss.txt
-  xss_payloads: wordlists/xss_payloads.txt
   users: wordlists/users.txt
 
 tools:

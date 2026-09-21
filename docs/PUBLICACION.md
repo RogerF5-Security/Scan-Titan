@@ -4,7 +4,7 @@ El propietario autorizo la publicacion de este repositorio el 8 de septiembre de
 
 ## Contenido de la distribucion
 
-Se incluyen el motor, configuracion de ejemplo sin credenciales, instaladores, pruebas, documentacion, plantilla publica, conocimiento general y las doce wordlists del proyecto. Nmap, Nuclei, ZAP, WhatWeb y sus recursos se instalan por separado; no se distribuyen sus binarios locales.
+Se incluyen el motor, configuracion de ejemplo sin credenciales, instaladores, pruebas, documentacion, plantilla publica, conocimiento general y las once wordlists del proyecto. Nmap, Nuclei, ZAP, WhatWeb y sus recursos se instalan por separado; no se distribuyen sus binarios locales.
 
 Las carpetas `reports/` y `audit_reports/` solo contienen marcadores vacios. Los objetivos del archivo versionado son ejemplos comentados. Los reportes internos, estado, evidencia, copias de seguridad y el exportador privado de detalle tecnico quedan fuera del paquete.
 

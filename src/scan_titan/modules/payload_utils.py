@@ -197,9 +197,12 @@ def sqli_bypass_variants(payload: str) -> list[str]:
 
 
 def xss_payloads(wordlists: dict[str, list[str]], defaults: list[str], *, limit: int) -> list[str]:
-    wordlist_xss = [payload for payload in wordlists.get("xss", [])[:limit] if _looks_like_xss_payload(payload)]
+    wordlist_xss = [
+        payload
+        for payload in wordlists.get("xss", [])[: max(2000, limit * 20)]
+        if _looks_like_xss_payload(payload)
+    ][:limit]
     seeds = unique_values(
-        wordlists.get("xss_payloads", [])[:limit],
         wordlist_xss,
         defaults,
     )

@@ -191,7 +191,7 @@ class WafResilienceModule(VulnerabilityModule):
         probes: list[WafProbe] = []
         source_payloads = {
             "SQLi": ctx.wordlists.get("sqli", [])[:12],
-            "XSS": (ctx.wordlists.get("xss_payloads", []) or ctx.wordlists.get("xss", []))[:12],
+            "XSS": ctx.wordlists.get("xss", [])[:12],
             "LFI": ctx.wordlists.get("lfi", [])[:12],
             "RCE": ctx.wordlists.get("command_injection", [])[:12],
             "SSTI": ctx.wordlists.get("ssti", [])[:12],

@@ -4,6 +4,13 @@ Este archivo registra los cambios funcionales verificables de cada version.
 
 Las versiones `21.3.2` y `21.3.3` documentan iteraciones locales verificadas que se consolidaron en `22.0.0`; no se publicaron como tags independientes.
 
+## [22.1.1] - 2026-09-21
+
+- El cargador cuenta solo entradas reales y unicas, aplica el limite despues de deduplicar y deja de generar relleno hasta 10 000.
+- XSS utiliza una sola wordlist canonica (`wordlists/xss.txt`); se retira `xss_payloads.txt` porque sus 297 entradas ya estaban incluidas en ella.
+- El arranque oculta por defecto los conteos de wordlists y la configuracion de red, politica y ZAP; `--verbose-startup` permite consultarlos.
+- Se agregan pruebas de regresion para conteo exacto, limite tras deduplicacion, XSS unico y modo de arranque optativo.
+
 ## [22.1.0] - 2026-09-18
 
 ### Estabilidad y observabilidad
@@ -106,6 +113,7 @@ Las versiones `21.3.2` y `21.3.3` documentan iteraciones locales verificadas que
 - El monitor marca como desactualizado un estado `running` sin actividad reciente y resuelve correctamente la carpeta de runtime de cada copia.
 - La finalizacion ordenada interrumpe colas y pausas pendientes antes de generar los reportes disponibles.
 
+[22.1.1]: https://github.com/RogerF5-Security/Scan-Titan/releases/tag/v22.1.1
 [22.1.0]: https://github.com/RogerF5-Security/Scan-Titan/releases/tag/v22.1.0
 [22.0.1]: https://github.com/RogerF5-Security/Scan-Titan/releases/tag/v22.0.1
 [22.0.0]: https://github.com/RogerF5-Security/Scan-Titan/releases/tag/v22.0.0

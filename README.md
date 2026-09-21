@@ -4,7 +4,7 @@
 
 Motor comunitario de auditoria automatizada en Python: reconocimiento, pruebas web, orquestacion de herramientas externas y reportes de vulnerabilidades para profesionales y equipos de seguridad de cualquier region.
 
-**Version del motor:** 22.1.0. **Estado:** repositorio publico. [Web de Scan Titan](https://rogerf5-security.github.io/Scan-Titan/).
+**Version del motor:** 22.1.1. **Estado:** repositorio publico. [Web de Scan Titan](https://rogerf5-security.github.io/Scan-Titan/).
 
 ![Captura de la web pública de Scan Titan](assets/scan-titan-web-screenshot.png)
 
@@ -47,6 +47,8 @@ python main.py
 
 La plantilla contiene ejemplos comentados. Una vez definidos los objetivos, el escaneo se ejecuta sin confirmaciones interactivas. El instalador puede requerir permisos del sistema; revisa sus avisos sobre herramientas faltantes.
 
+El arranque omite los conteos de wordlists y el detalle de red, politica y ZAP. `--verbose-startup` los muestra a demanda. Los conteos corresponden a entradas reales, unicas y cargadas (hasta `max_wordlist_entries`); no se generan entradas para alcanzar un minimo artificial. XSS usa solo `wordlists/xss.txt`.
+
 ## Capacidades
 
 - Reconocimiento de tecnologias, puertos, rutas, APIs y aplicaciones SPA.
@@ -67,6 +69,7 @@ Los resultados requieren valorar su evidencia y confianza. Una prueba automatiza
 | --- | --- |
 | `python main.py` | Ejecucion zero-touch |
 | `python main.py --full` | Mayor cobertura y wordlists completas |
+| `python main.py --verbose-startup` | Mostrar detalles de arranque y conteos reales cargados |
 | `python main.py --monitor` | Monitor independiente |
 | `python main.py --dashboard` | Regenerar dashboard con resultados existentes |
 | `python main.py --health-check` | Comprobar estructura, dependencias y herramientas |

