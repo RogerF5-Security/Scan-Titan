@@ -1,8 +1,12 @@
 # Scan Titan
 
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white) [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-22c55e)](LICENSE) [![Build](https://github.com/RogerF5-Security/Scan-Titan/actions/workflows/validacion.yml/badge.svg)](https://github.com/RogerF5-Security/Scan-Titan/actions/workflows/validacion.yml)
+
 Motor comunitario de auditoria automatizada en Python: reconocimiento, pruebas web, orquestacion de herramientas externas y reportes de vulnerabilidades para profesionales y equipos de seguridad de cualquier region.
 
 **Version del motor:** 22.1.0. **Estado:** repositorio publico. [Web de Scan Titan](https://rogerf5-security.github.io/Scan-Titan/).
+
+![Captura de la web pública de Scan Titan](assets/scan-titan-web-screenshot.png)
 
 ## Extension para Chrome
 
@@ -54,6 +58,8 @@ La plantilla contiene ejemplos comentados. Una vez definidos los objetivos, el e
 - Dashboard diario e informe formal HTML con portada y detalle de hallazgos.
 
 Los resultados requieren valorar su evidencia y confianza. Una prueba automatizada no garantiza encontrar todas las vulnerabilidades ni demostrar por si sola su explotabilidad.
+
+**Uso autorizado:** ejecuta el motor solo contra activos incluidos en un alcance escrito y en entornos controlados. Ajusta concurrencia y perfiles al plan de auditoría.
 
 ## Comandos
 
