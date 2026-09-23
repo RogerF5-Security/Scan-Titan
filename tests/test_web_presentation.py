@@ -44,7 +44,11 @@ class PublicWebsiteTests(unittest.TestCase):
                     continue
                 url = urlsplit(value)
                 if url.scheme or url.netloc:
-                    self.assertEqual(url.scheme, "https", value)
+                    if url.scheme == "data":
+                        self.assertEqual(tag, "link", value)
+                        self.assertEqual(attrs.get("rel"), "icon", value)
+                    else:
+                        self.assertEqual(url.scheme, "https", value)
                     continue
                 if not url.path and url.fragment:
                     self.assertIn(url.fragment, page.ids, value)
@@ -64,20 +68,46 @@ class PublicWebsiteTests(unittest.TestCase):
                 self.assertIn("width", attrs)
                 self.assertIn("height", attrs)
 
-    def test_brand_and_interactive_workflow_are_packaged(self):
+    def test_single_file_landing_contains_requested_sections_and_motion(self):
         index = (WEB / "index.html").read_text(encoding="utf-8")
-        script = (WEB / "app.js").read_text(encoding="utf-8")
-        logo = WEB / "media" / "scan-titan-logo.png"
-        self.assertTrue(logo.is_file())
-        self.assertGreater(logo.stat().st_size, 20_000)
-        self.assertIn('class="hero-logo"', index)
-        self.assertIn("data-workflow", index)
-        self.assertEqual(index.count("data-flow-step="), 4)
-        self.assertIn('id="flow-toggle"', index)
-        self.assertIn("window.setInterval", script)
-        self.assertIn("prefers-reduced-motion", script)
-        self.assertNotIn("Recon_Sitemap.html", index)
-        self.assertNotIn('id="tab-sitemap"', index)
+        self.assertIn("<style>", index)
+        self.assertIn("<script>", index)
+        self.assertNotIn('rel="stylesheet"', index)
+        self.assertNotIn('src="app.js"', index)
+        for section_id in ("inicio", "motor", "capacidades", "operar", "origen", "futuro", "comunidad"):
+            self.assertIn(f'id="{section_id}"', index)
+        for phrase in ("Vulnerability Scanner", "Open Source", "Nmap", "Nuclei", "Daily Dashboard", "Scan Ragnarok", "Pull Request"):
+            self.assertIn(phrase.casefold(), index.casefold())
+        self.assertIn("IntersectionObserver", index)
+        self.assertIn("prefers-reduced-motion", index)
+        for output in ("Daily_vulns_report.html", "Formal_Audit_Report_Latest.html", "Recon_Matrix.xlsx", "External_Tools_Observability.html"):
+            self.assertIn(output, index)
+        for command in ("python main.py --health-check", "python main.py --full", "python main.py --monitor", "python main.py --dashboard"):
+            self.assertIn(command, index)
+
+    def test_toolchain_and_wordlist_inventory_are_visible(self):
+        index = (WEB / "index.html").read_text(encoding="utf-8")
+        for tool in ("Nmap", "Nuclei", "ffuf", "WhatWeb", "Subfinder", "wafw00f", "OWASP ZAP"):
+            self.assertIn(tool.casefold(), index.casefold())
+
+        wordlists = WEB.parents[1] / "wordlists"
+        expected = {
+            "403bypass.txt", "command_injection.txt", "lfi.txt", "passwords.txt",
+            "rutas.txt", "sqli.txt", "ssrf.txt", "ssti.txt", "subdomains.txt",
+            "users.txt", "xss.txt",
+        }
+        for filename in expected:
+            values = []
+            seen = set()
+            for line in (wordlists / filename).read_text(encoding="utf-8", errors="ignore").splitlines():
+                value = line.strip()
+                key = value.casefold()
+                if not value or value.startswith("#") or key in seen:
+                    continue
+                seen.add(key)
+                values.append(value)
+            self.assertIn(filename, index)
+            self.assertIn(f"{len(values):,}".replace(",", "."), index)
 
     def test_no_remote_runtime_or_private_audit_data(self):
         for path in WEB.rglob("*"):
