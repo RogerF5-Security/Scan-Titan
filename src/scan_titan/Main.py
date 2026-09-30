@@ -73,6 +73,8 @@ from knowledge_manager import KnowledgeBase
 from owasp_2025 import normalize_owasp_2025
 from recon_manager import ReconMatrixManager
 from resource_monitor import ProcessTreeSampler
+from session_manager import SessionManager
+from ssh_audit import NmapSSHAuditor
 
 try:
     from technical_detail_exporter import TechnicalDetailExporter, TechnicalDetailOptions
@@ -243,7 +245,7 @@ KNOWLEDGE_FILE = _path_from_env(
     "SCAN_TITAN_KNOWLEDGE_FILE",
     _first_existing(BASE_DIR / "data" / "scan_titan_knowledge.json", BASE_DIR / "scan_titan_knowledge.json"),
 )
-SCAN_VERSION = "TITAN v22.1.1 COMMUNITY ZERO-TOUCH"
+SCAN_VERSION = "TITAN v22.2.0 COMMUNITY ZERO-TOUCH"
 HEADER_SEPARATOR = "=" * 72
 REPORT_SEPARATOR = "─" * 72
 
@@ -677,7 +679,7 @@ class Console:
 {Fore.RED}  ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝       ╚═╝   ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝
 {Fore.YELLOW}        [ SCAN TITAN :: WALL-BREACH VULNERABILITY ENGINE ]
 {Fore.CYAN}        [ ZERO-TOUCH | RECON | DAST | NMAP | NUCLEI | EVIDENCE ]
-{Fore.MAGENTA}        [ SCAN TITAN COMMUNITY | TATAKAE | ⚔️ v22.1.1 ⚔️ ]
+{Fore.MAGENTA}        [ SCAN TITAN COMMUNITY | TATAKAE | ⚔️ v22.2.0 ⚔️ ]
 """
         )
 
@@ -910,9 +912,9 @@ class PolicyEngine:
             "browser_audit",
         },
         "fuzzing": {"path_discovery", "recon_surface", "unauthenticated_map"},
-        "injections": {"sqli", "lfi", "ssrf", "injection", "xss", "client_side"},
-        "auth": {"auth_session", "authorization"},
-        "advanced": {"advanced_logic", "browser_audit"},
+        "injections": {"sqli", "lfi", "ssrf", "injection", "xss", "client_side", "stored_xss"},
+        "auth": {"auth_session", "authorization", "role_audit", "session_lifecycle"},
+        "advanced": {"advanced_logic", "browser_audit", "race_conditions", "websocket_analyzer"},
     }
 
     PROFILE_DEFAULTS = {
@@ -1031,6 +1033,7 @@ class PolicyEngine:
                 evidence_cfg.get("browser_screenshot_max_per_target", 150) or 150
             ),
             auth_profiles=self._auth_profiles(),
+            stateful=self._section("stateful"),
         )
         if getattr(self.args, "full", False):
             policy.skip_external = False
@@ -1289,6 +1292,10 @@ class RuntimeConfig:
             5400 if self.full_power else nuclei_cfg.get("timeout_seconds", 2400),
         )
         self.nuclei_templates_path = str(nuclei_cfg.get("templates_path", "nuclei-templates") or "nuclei-templates")
+        self.nuclei_origin_only = bool(nuclei_cfg.get("origin_only_broad_profiles", True))
+        self.nuclei_idle_timeout = max(30, int(nuclei_cfg.get("idle_timeout_seconds", 180)))
+        self.zap_progress_timeout = max(30, int(zap_cfg.get("progress_timeout_seconds", 180)))
+        self.ssh_username = str(nmap_cfg.get("ssh_username", "scan_titan_probe"))
         self.nuclei_system_resolvers = bool(nuclei_cfg.get("system_resolvers", True))
         self.nuclei_disable_host_error_skip = bool(nuclei_cfg.get("disable_host_error_skip", True))
         self.nuclei_max_seed_urls = max(1, min(int(nuclei_cfg.get("max_seed_urls", 60) or 60), 250))
@@ -1417,7 +1424,8 @@ class RuntimeConfig:
     def _timeout_value(self, value: Any, default: Any = 1) -> int:
         raw = default if value in (None, "") else value
         try:
-            return max(1, int(raw))
+            parsed = int(raw)
+            return parsed if parsed > 0 else max(1, int(default or 1))
         except (TypeError, ValueError):
             try:
                 return max(1, int(default or 1))
@@ -1430,7 +1438,8 @@ class RuntimeConfig:
         out: dict[str, int] = {}
         for key, raw in value.items():
             try:
-                out[str(key).strip().lower()] = max(minimum, int(raw))
+                if int(raw) > 0:
+                    out[str(key).strip().lower()] = max(minimum, int(raw))
             except (TypeError, ValueError):
                 continue
         return out
@@ -1826,7 +1835,8 @@ class StateStore:
                 current["last_evidence"] = record.get("last_evidence")
         return migrated
 
-    def enrich(self, findings: list[Finding], scanned_target: str, timestamp: str) -> list[Finding]:
+    def enrich(self, findings: list[Finding], scanned_target: str, timestamp: str,
+               *, complete: bool = True) -> list[Finding]:
         for finding in findings:
             finding.refresh_identity(finding.asset or scanned_target)
         unique = {finding.fingerprint: finding for finding in findings}
@@ -1879,7 +1889,7 @@ class StateStore:
                 "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             }
         for fingerprint, record in records.items():
-            if record.get("target") == scanned_target and fingerprint not in unique:
+            if complete and record.get("target") == scanned_target and fingerprint not in unique:
                 if record.get("state") == "ACTIVE":
                     record["previous_state"] = "ACTIVE"
                     record["state"] = "NOT_SEEN"
@@ -1939,7 +1949,8 @@ class ReportWriter:
         self.report_dir.mkdir(parents=True, exist_ok=True)
         self.history_dir.mkdir(parents=True, exist_ok=True)
 
-    def write_target_report(self, target: Target, findings: list[Finding], timestamp: str) -> Path:
+    def write_target_report(self, target: Target, findings: list[Finding], timestamp: str,
+                            coverage: dict[str, Any] | None = None) -> Path:
         path = self.report_dir / f"{self._slug(target.display)}_{timestamp.split()[0]}.txt"
         counts = Counter(finding.severity for finding in findings)
         with path.open("w", encoding="utf-8") as handle:
@@ -1948,6 +1959,9 @@ class ReportWriter:
             handle.write(f"  Objetivo: {target.display}\n")
             handle.write(f"  Fecha:    {timestamp}\n")
             handle.write(f"  Total:    {len(findings)} hallazgos\n")
+            if coverage:
+                handle.write(f"  Ejecucion: {coverage.get('execution_state', 'unknown')}\n")
+                handle.write(f"  Cobertura: {coverage.get('evidence_file', '')}\n")
             handle.write(f"{HEADER_SEPARATOR}\n\n")
             handle.write("RESUMEN:\n")
             for severity in ("Critical", "High", "Medium", "Low", "Info"):
@@ -1961,10 +1975,11 @@ class ReportWriter:
                 for line in finding.report_lines():
                     handle.write(f"{line}\n")
                 handle.write(f"{REPORT_SEPARATOR}\n")
-        self.write_target_json_report(target, findings, timestamp)
+        self.write_target_json_report(target, findings, timestamp, coverage)
         return path
 
-    def write_target_json_report(self, target: Target, findings: list[Finding], timestamp: str) -> Path:
+    def write_target_json_report(self, target: Target, findings: list[Finding], timestamp: str,
+                                coverage: dict[str, Any] | None = None) -> Path:
         path = self.report_dir / f"{self._slug(target.display)}_{timestamp.split()[0]}.json"
         counts = Counter(finding.severity for finding in findings)
         payload = {
@@ -1976,6 +1991,7 @@ class ReportWriter:
             "date": timestamp,
             "summary": {severity: counts.get(severity, 0) for severity in ("Critical", "High", "Medium", "Low", "Info")},
             "total_findings": len(findings),
+            "coverage": coverage or {},
             "findings": [self._finding_to_dict(index, finding) for index, finding in enumerate(findings, start=1)],
         }
         with path.open("w", encoding="utf-8") as handle:
@@ -2250,6 +2266,7 @@ class ExternalTools:
             getattr(config, "external_reports_dir", REPORTS_DIR / "external reports")
         )
         self._whatweb_official_cache: dict[str, bool] = {}
+        self._zap_lock = asyncio.Lock()
 
     def _external_report_path(self, tool: str, filename: str) -> Path:
         """Return the centralized raw-output path for an external engine."""
@@ -2402,31 +2419,30 @@ class ExternalTools:
         else:
             Console.warn("FFUF deshabilitado por politica")
         await asyncio.sleep(1.0)
-        if self.config.policy.enable_nuclei:
-            try:
-                await self.config.runtime_control.wait_if_paused()
-                if self.config.runtime_control.finish_requested:
-                    Console.warn("Nuclei omitido por finalizacion ordenada")
-                    return findings
-                nuclei_findings = await self.run_nuclei(ctx)
-                findings.extend(nuclei_findings)
-            except Exception as exc:
-                Console.warn(f"Orquestacion Nuclei fallida: {exc}")
-        else:
-            Console.warn("Nuclei deshabilitado por politica")
-        await asyncio.sleep(1.0)
         if self.config.policy.enable_zap:
             try:
                 await self.config.runtime_control.wait_if_paused()
                 if self.config.runtime_control.finish_requested:
                     Console.warn("ZAP omitido por finalizacion ordenada")
                     return findings
-                zap_findings = await self.run_zap(ctx)
-                findings.extend(zap_findings)
+                async with self._zap_lock:
+                    findings.extend(await self.run_zap(ctx))
             except Exception as exc:
                 Console.warn(f"Orquestacion ZAP fallida: {exc}")
         else:
             Console.warn("ZAP deshabilitado por politica")
+        await asyncio.sleep(1.0)
+        if self.config.policy.enable_nuclei:
+            try:
+                await self.config.runtime_control.wait_if_paused()
+                if self.config.runtime_control.finish_requested:
+                    Console.warn("Nuclei omitido por finalizacion ordenada")
+                    return findings
+                findings.extend(await self.run_nuclei(ctx))
+            except Exception as exc:
+                Console.warn(f"Orquestacion Nuclei fallida: {exc}")
+        else:
+            Console.warn("Nuclei deshabilitado por politica")
         return findings
 
     def _resolve_binary(self, tool: str, default: str) -> str | None:
@@ -2840,6 +2856,16 @@ class ExternalTools:
                 xml_path("vulners_cvss"),
             ),
         ]
+        ssh_ports = {22}
+        for service in ctx.recon.get('ports_services', []):
+            if 'ssh' in str(service).lower():
+                match = re.search(r'(\d+)/tcp', str(service))
+                if match:
+                    ssh_ports.add(int(match.group(1)))
+        ssh_output = xml_path('ssh_security')
+        profiles.append(('ssh_security', NmapSSHAuditor.command(
+            binary, nmap_target, list(ssh_ports), ssh_output,
+            getattr(self.config, 'ssh_username', 'scan_titan_probe')), ssh_output))
         profiles = [item for item in profiles if self.config.external_profile_enabled("nmap", item[0])]
         if not profiles:
             Console.warn("Nmap omitido: no hay perfiles habilitados en config.yaml")
@@ -2849,6 +2875,14 @@ class ExternalTools:
             if self.config.runtime_control.finish_requested:
                 Console.warn(f"Perfil Nmap omitido por finalizacion ordenada: {name}")
                 break
+            if name == 'ssh_security':
+                for service in ctx.recon.get('ports_services', []):
+                    if 'ssh' in str(service).lower():
+                        match = re.search(r'(\d+)/tcp', str(service))
+                        if match:
+                            ssh_ports.add(int(match.group(1)))
+                cmd = NmapSSHAuditor.command(binary, nmap_target, list(ssh_ports), export_path,
+                                            getattr(self.config, 'ssh_username', 'scan_titan_probe'))
             Console.step(f"Nmap perfil iniciado: {name} -> {nmap_target}")
             Console.step(f"Nmap comando [{name}]: {self._format_command(cmd)}")
             if self.config.telemetry:
@@ -2866,6 +2900,11 @@ class ExternalTools:
             except OSError as exc:
                 Console.warn(f"No se pudo leer la evidencia XML de Nmap: {clean_text(exc, 220)}")
             parsed = self._parse_nmap(ctx, xml_text, name)
+            ctx.recon.setdefault('external_coverage', []).append({
+                'tool': 'nmap', 'profile': name, 'returncode': returncode,
+                'state': 'partial' if timed_out or returncode != 0 or '<nmaprun' not in xml_text else 'completed',
+                'parsed': len(parsed), 'export': str(export_path), 'timed_out': timed_out,
+            })
             Console.ok(f"Nmap perfil finalizado: {name} rc={returncode} duracion={duration:.1f}s parseados={len(parsed)}")
             findings.extend(parsed)
             self._log_external(
@@ -2936,12 +2975,14 @@ class ExternalTools:
         binary = self._resolve_binary("nuclei", "nuclei")
         if not binary:
             Console.warn("Nuclei no encontrado en PATH")
+            ctx.recon.setdefault('external_coverage', []).append({'tool': 'nuclei', 'state': 'unavailable'})
             return []
         profiles = [
             item
             for item in self._nuclei_profiles(binary, ctx)
             if self.config.external_profile_enabled("nuclei", item[0])
         ]
+        profiles.sort(key=lambda item: {'conservative_scan': 0, 'vulnerability_scan': 1, 'cve_scan': 2}.get(item[0], 3))
         all_findings: list[Finding] = []
         seen: set[str] = set()
         if not profiles:
@@ -2965,6 +3006,12 @@ class ExternalTools:
             elif returncode not in {0, None}:
                 Console.warn(f"Perfil Nuclei finalizo con codigo {returncode}: {clean_text(stderr, 220)}")
             findings, parser_error = self._parse_nuclei_with_status(ctx, export_path, stdout)
+            ctx.recon.setdefault('external_coverage', []).append({
+                'tool': 'nuclei', 'profile': name, 'returncode': returncode,
+                'timed_out': timed_out, 'parsed': len(findings), 'parser_error': parser_error,
+                'state': 'partial' if timed_out or returncode != 0 or parser_error else 'completed',
+                'export': str(export_path), 'duration_seconds': round(duration, 2),
+            })
             empty_reason = self._nuclei_empty_reason(
                 returncode,
                 timed_out,
@@ -2974,6 +3021,9 @@ class ExternalTools:
                 len(findings),
                 parser_error,
             )
+            if empty_reason and not empty_reason.startswith('Nuclei completo correctamente:'):
+                ctx.recon['external_coverage'][-1]['state'] = 'partial'
+                ctx.recon['external_coverage'][-1]['reason'] = empty_reason
             self._log_external(
                 "nuclei",
                 name,
@@ -3011,6 +3061,9 @@ class ExternalTools:
         started = time.monotonic()
         zap_process: asyncio.subprocess.Process | None = None
         started_daemon = False
+        ready = False
+        ctx.recon['_zap_export_path'] = str(export_path)
+        ctx.recon['_zap_cached_alerts'] = []
         Console.step(f"Integracion ZAP iniciada: modo={mode} -> {ctx.target.url}")
         if self.config.telemetry:
             self.config.telemetry.external_start("zap", mode, ctx.target.display, command_label)
@@ -3019,6 +3072,7 @@ class ExternalTools:
             if not ready:
                 if not self.config.zap_start_daemon:
                     reason = "La API de ZAP no responde y start_daemon=false."
+                    ctx.recon.setdefault('external_coverage', []).append({'tool': 'zap', 'state': 'unavailable', 'reason': reason})
                     Console.warn(reason)
                     self._log_external(
                         "zap",
@@ -3038,6 +3092,7 @@ class ExternalTools:
                 binary = self._resolve_zap_binary()
                 if not binary:
                     reason = "No se encontro el binario de ZAP en PATH ni en rutas comunes de Windows."
+                    ctx.recon.setdefault('external_coverage', []).append({'tool': 'zap', 'state': 'unavailable', 'reason': reason})
                     Console.warn(reason)
                     self._log_external(
                         "zap",
@@ -3057,16 +3112,20 @@ class ExternalTools:
                 daemon_cmd = self._zap_daemon_command(binary)
                 Console.step(f"ZAP daemon comando: {self._format_command(daemon_cmd)}")
                 daemon_cwd = str(Path(binary).resolve().parent)
-                zap_process = await asyncio.create_subprocess_exec(
-                    *daemon_cmd,
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
-                    cwd=daemon_cwd,
-                )
+                daemon_log = self._external_report_path('zap', f'zap_daemon_{stamp}.log')
+                with daemon_log.open('ab') as startup_log:
+                    zap_process = await asyncio.create_subprocess_exec(
+                        *daemon_cmd, stdout=startup_log, stderr=asyncio.subprocess.STDOUT,
+                        cwd=daemon_cwd,
+                    )
+                ctx.recon['zap_daemon_log'] = str(daemon_log)
                 started_daemon = True
                 ready = await self._zap_wait_ready(self.config.zap_startup_timeout)
             if not ready:
                 reason = "El daemon de ZAP no quedo listo antes del timeout de inicio."
+                ctx.recon.setdefault('external_coverage', []).append({
+                    'tool': 'zap', 'state': 'startup_failed', 'reason': reason,
+                    'daemon_log': ctx.recon.get('zap_daemon_log', '')})
                 Console.warn(reason)
                 self._log_external(
                     "zap",
@@ -3086,6 +3145,18 @@ class ExternalTools:
 
             version = await self._zap_api("core/view/version")
             Console.ok(f"API de ZAP lista: version={version.get('version', '-')}")
+            await self._zap_rule_inventory(ctx)
+            context_name = f'scan_titan_{slug}_{uuid.uuid4().hex[:8]}'
+            context = await self._zap_api('context/action/newContext', {'contextName': context_name})
+            context_id = str(context.get('contextId', ''))
+            if not context_id.isdigit():
+                raise RuntimeError('ZAP did not return a valid contextId')
+            ctx.recon['_zap_context_name'] = context_name
+            ctx.recon['_zap_context_id'] = context_id
+            origin = self._origin_url(ctx.target.url).rstrip('/')
+            await self._zap_api('context/action/includeInContext', {
+                'contextName': context_name, 'regex': re.escape(origin) + r'(?:/.*)?'})
+            await self._zap_api('context/action/setContextInScope', {'contextName': context_name, 'booleanInScope': 'true'})
             seeds = self._zap_seed_urls(ctx)
             accessed = await self._zap_access_urls(ctx, seeds)
             spider_count = 0
@@ -3102,17 +3173,7 @@ class ExternalTools:
                     ctx.target.url,
                 )
                 passive_records = await self._zap_wait_passive(ctx)
-            alerts_payload = await self._zap_api(
-                "core/view/alerts",
-                {
-                    "baseurl": ctx.target.url,
-                    "start": "0",
-                    "count": str(max(1, self.config.zap_max_alerts)),
-                },
-            )
-            alerts = alerts_payload.get("alerts", [])
-            if not isinstance(alerts, list):
-                alerts = []
+            alerts = await self._zap_checkpoint(ctx, 'finished' if active_completed else 'partial')
             raw_alert_count = len(alerts)
             alerts, filtered_zap_alerts = await self._filter_zap_soft_auth_redirect_alerts(ctx, alerts)
             if filtered_zap_alerts:
@@ -3134,13 +3195,27 @@ class ExternalTools:
                 "raw_alert_count": raw_alert_count,
                 "filtered_soft_auth_alerts": filtered_zap_alerts,
                 "alerts": alerts,
+                "stages": ctx.recon.get('zap_stages', {}),
             }
             export_path.write_text(json.dumps(export_payload, indent=2, ensure_ascii=False), encoding="utf-8")
             findings = self._parse_zap_alerts(ctx, alerts)
+            stages = ctx.recon.get('zap_stages', {})
+            complete = (active_completed and passive_records == 0
+                        and not ctx.recon.get('zap_alerts_capped')
+                        and not ctx.recon.get('zap_rule_inventory', {}).get('missing_baseline_rules') and all(
+                stage.get('state') == 'completed' for stage in stages.values())
+                        )
+            ctx.recon.setdefault('external_coverage', []).append({
+                'tool': 'zap', 'state': 'completed' if complete else 'partial',
+                'parsed': len(findings), 'raw_alerts': raw_alert_count,
+                'stages': stages, 'export': str(export_path),
+                'alerts_capped': ctx.recon.get('zap_alerts_capped', False),
+                'rule_inventory': ctx.recon.get('zap_rule_inventory', {}),
+            })
             partial_reason = (
                 f"El escaneo activo de ZAP se detuvo en {active_progress}% ({active_stop_reason})."
                 if not active_completed
-                else ""
+                else ("Cobertura ZAP parcial; revisar etapas y limite de alertas." if not complete else "")
             )
             empty_reason = partial_reason or ("" if findings else (
                 "ZAP finalizo sin alertas reportables."
@@ -3183,6 +3258,17 @@ class ExternalTools:
             return findings
         except Exception as exc:
             reason = clean_text(exc, 500)
+            partial_alerts = ctx.recon.get('_zap_cached_alerts', [])
+            if ready:
+                try:
+                    partial_alerts = await self._zap_checkpoint(ctx, 'failed_partial')
+                except Exception:
+                    pass
+            partial_findings = self._parse_zap_alerts(ctx, partial_alerts)
+            ctx.recon.setdefault('external_coverage', []).append({
+                'tool': 'zap', 'state': 'failed_partial', 'reason': reason,
+                'parsed': len(partial_findings), 'export': str(export_path),
+            })
             Console.warn(f"Integracion ZAP fallida: {reason}")
             self._log_external(
                 "zap",
@@ -3194,14 +3280,103 @@ class ExternalTools:
                 "",
                 export_path,
                 duration=time.monotonic() - started,
-                parsed_count=0,
+                parsed_count=len(partial_findings),
                 empty_reason=reason,
                 target=ctx.target.display,
             )
-            return []
+            return partial_findings
         finally:
+            for component, scan_id in ctx.recon.pop('_zap_running', {}).items():
+                with contextlib.suppress(Exception):
+                    await self._zap_api(f'{component}/action/stop', {'scanId': scan_id}, timeout=5)
+            context_name = ctx.recon.pop('_zap_context_name', '')
+            if context_name:
+                with contextlib.suppress(Exception):
+                    await self._zap_api('context/action/removeContext', {'contextName': context_name}, timeout=5)
             if started_daemon and self.config.zap_shutdown_after_scan:
                 await self._zap_shutdown(zap_process)
+
+    async def _zap_rule_inventory(self, ctx: ScanContext) -> None:
+        rules = await self._zap_api('pscan/view/scanners', timeout=10)
+        scanners = rules.get('scanners', [])
+        enabled = {str(item.get('id')) for item in scanners if isinstance(item, dict)
+                   and str(item.get('enabled', '')).lower() == 'true'
+                   and str(item.get('alertThreshold', '')).upper() != 'OFF'}
+        baseline = {'10010', '10020', '10021'}
+        missing = sorted(baseline - enabled)
+        ctx.recon['zap_rule_inventory'] = {'passive_rules_loaded': len(scanners),
+                                         'passive_rules_enabled': len(enabled),
+                                         'missing_baseline_rules': missing}
+        if missing:
+            Console.warn(f'ZAP cobertura pasiva incompleta: reglas base ausentes/desactivadas={missing}; revise complementos y zap_daemon*.log')
+
+    async def _zap_checkpoint(self, ctx: ScanContext, state: str) -> list[dict[str, Any]]:
+        """Page alerts and persist usable results before the next long phase."""
+        alerts: list[dict[str, Any]] = []
+        cap = max(1, self.config.zap_max_alerts)
+        base = self._origin_url(ctx.target.url)
+        while len(alerts) < cap:
+            count = min(100, cap - len(alerts))
+            payload = await self._zap_api('core/view/alerts', {
+                'baseurl': base, 'start': str(len(alerts)), 'count': str(count)}, timeout=10)
+            page = payload.get('alerts', [])
+            if not isinstance(page, list):
+                raise RuntimeError('Invalid ZAP alerts payload')
+            if any(not isinstance(item, dict) for item in page):
+                raise RuntimeError('Invalid ZAP alert entry')
+            alerts.extend(page)
+            if len(page) < count:
+                break
+        ctx.recon['zap_alerts_capped'] = len(alerts) >= cap
+        ctx.recon['_zap_cached_alerts'] = alerts
+        raw_path = ctx.recon.get('_zap_export_path')
+        if raw_path:
+            path = Path(raw_path)
+            temporary = path.with_suffix('.tmp')
+            temporary.write_text(json.dumps({
+                'schema': 'scan_titan_zap_alerts_v2', 'target': ctx.target.url,
+                'state': state, 'stages': ctx.recon.get('zap_stages', {}), 'alerts': alerts,
+            }, indent=2, ensure_ascii=False), encoding='utf-8')
+            temporary.replace(path)
+        return alerts
+
+    async def _zap_poll_scan(self, ctx: ScanContext, component: str, scan_id: str,
+                             timeout: int) -> tuple[int, str]:
+        deadline = self._external_deadline(timeout)
+        progress = -1
+        changed = time.monotonic()
+        checkpoint_at = 0.0
+        reason = 'timeout'
+        ctx.recon.setdefault('_zap_running', {})[component] = scan_id
+        try:
+            while self._deadline_open(deadline):
+                await self.config.runtime_control.wait_if_paused()
+                if self.config.runtime_control.finish_requested:
+                    reason = 'finalizacion_solicitada'
+                    break
+                payload = await self._zap_api(f'{component}/view/status', {'scanId': scan_id}, timeout=10)
+                current = int(payload['status'])
+                if current > progress:
+                    changed = time.monotonic()
+                    progress = current
+                ctx.heartbeat(f'zap_{component}', f'{progress}%', progress, 0)
+                if time.monotonic() >= checkpoint_at:
+                    await self._zap_checkpoint(ctx, 'running')
+                    checkpoint_at = time.monotonic() + 15
+                if progress >= 100:
+                    reason = 'completed'
+                    break
+                if time.monotonic() - changed >= getattr(self.config, 'zap_progress_timeout', 180):
+                    reason = 'stalled'
+                    break
+                await asyncio.sleep(2)
+            return max(0, progress), reason
+        finally:
+            if reason != 'completed':
+                with contextlib.suppress(Exception):
+                    await self._zap_api(f'{component}/action/stop', {'scanId': scan_id}, timeout=5)
+            ctx.recon['_zap_running'].pop(component, None)
+            ctx.recon.setdefault('zap_stages', {})[component] = {'state': reason, 'progress': max(0, progress)}
 
     def _resolve_zap_binary(self) -> str | None:
         resolved = self._resolve_binary("zap", "zap.bat")
@@ -3223,9 +3398,14 @@ class ExternalTools:
         return None
 
     def _zap_daemon_command(self, binary: str) -> list[str]:
+        daemon_home = self.external_reports_dir / 'zap_runtime'
+        daemon_home.mkdir(parents=True, exist_ok=True)
         cmd = [
             binary,
             "-daemon",
+            "-silent",
+            "-dir",
+            str(daemon_home.resolve()),
             "-host",
             self.config.zap_host,
             "-port",
@@ -3414,7 +3594,7 @@ class ExternalTools:
                 break
             Console.heartbeat("zap_access", clean_text(url, 80), index, accessed)
             try:
-                await self._zap_api("core/action/accessUrl", {"url": url, "followRedirects": "true"}, timeout=20)
+                await self._zap_api("core/action/accessUrl", {"url": url, "followRedirects": "false"}, timeout=20)
                 accessed += 1
             except Exception as exc:
                 message = clean_text(exc, 180)
@@ -3455,27 +3635,14 @@ class ExternalTools:
                 "url": url,
                 "maxChildren": str(max(1, self.config.zap_max_children)),
                 "recurse": "true",
+                "contextName": ctx.recon.get('_zap_context_name'),
             },
             timeout=20,
         )
-        scan_id = str(scan.get("scan") or scan.get("scanId") or "0")
-        deadline = self._external_deadline(self.config.zap_spider_timeout)
-        last_status = "0"
-        while self._deadline_open(deadline):
-            await self.config.runtime_control.wait_if_paused()
-            if self.config.runtime_control.finish_requested:
-                break
-            status = await self._zap_api("spider/view/status", {"scanId": scan_id}, timeout=10)
-            last_status = str(status.get("status", "0"))
-            Console.heartbeat(
-                "zap_spider",
-                f"scan={scan_id} avance={last_status}% limite={self._timeout_text(self.config.zap_spider_timeout)}",
-                int(last_status or 0),
-                0,
-            )
-            if int(last_status or 0) >= 100:
-                break
-            await asyncio.sleep(3.0)
+        scan_id = str(scan.get('scan', scan.get('scanId', '')))
+        if not scan_id.isdigit():
+            raise RuntimeError('ZAP spider did not return a valid scan ID')
+        await self._zap_poll_scan(ctx, 'spider', scan_id, self.config.zap_spider_timeout)
         results = await self._zap_api("spider/view/results", {"scanId": scan_id}, timeout=20)
         found = results.get("results", [])
         if isinstance(found, list):
@@ -3488,13 +3655,18 @@ class ExternalTools:
     async def _zap_wait_passive(self, ctx: ScanContext) -> int:
         Console.step("Espera de analisis pasivo ZAP iniciada")
         deadline = self._external_deadline(self.config.zap_passive_timeout)
-        remaining = 0
+        remaining = -1
+        last_remaining = None
+        changed = time.monotonic()
         while self._deadline_open(deadline):
             await self.config.runtime_control.wait_if_paused()
             if self.config.runtime_control.finish_requested:
                 break
             records = await self._zap_api("pscan/view/recordsToScan", timeout=10)
             remaining = int(records.get("recordsToScan") or 0)
+            if remaining != last_remaining:
+                changed = time.monotonic()
+                last_remaining = remaining
             Console.heartbeat(
                 "zap_passive",
                 f"pendientes={remaining} limite={self._timeout_text(self.config.zap_passive_timeout)}",
@@ -3503,46 +3675,30 @@ class ExternalTools:
             )
             if remaining <= 0:
                 break
+            if time.monotonic() - changed >= getattr(self.config, 'zap_progress_timeout', 180):
+                break
             await asyncio.sleep(2.0)
+        ctx.recon.setdefault('zap_stages', {})['passive'] = {
+            'state': 'completed' if remaining == 0 else 'partial', 'remaining': remaining}
+        await self._zap_checkpoint(ctx, 'passive_checkpoint')
         return remaining
 
     async def _zap_active_scan(self, ctx: ScanContext, url: str) -> tuple[int, bool, int, str]:
         Console.step(f"Analisis activo ZAP iniciado -> {url}")
         scan = await self._zap_api(
             "ascan/action/scan",
-            {"url": url, "recurse": "true", "inScopeOnly": "false"},
+            {"url": url, "recurse": "true", "inScopeOnly": "true",
+             "contextId": ctx.recon.get('_zap_context_id')},
             timeout=20,
         )
-        scan_id = str(scan.get("scan") or scan.get("scanId") or "0")
-        deadline = self._external_deadline(self.config.zap_active_timeout)
-        last_status = "0"
-        stop_reason = ""
-        while self._deadline_open(deadline):
-            await self.config.runtime_control.wait_if_paused()
-            if self.config.runtime_control.finish_requested:
-                stop_reason = "finalizacion_solicitada"
-                break
-            status = await self._zap_api("ascan/view/status", {"scanId": scan_id}, timeout=10)
-            last_status = str(status.get("status", "0"))
-            Console.heartbeat(
-                "zap_active",
-                f"scan={scan_id} avance={last_status}% limite={self._timeout_text(self.config.zap_active_timeout)}",
-                int(last_status or 0),
-                0,
-            )
-            if int(last_status or 0) >= 100:
-                break
-            await asyncio.sleep(5.0)
-        progress = int(last_status or 0)
+        scan_id = str(scan.get('scan', scan.get('scanId', '')))
+        if not scan_id.isdigit():
+            raise RuntimeError('ZAP active scan did not return a valid scan ID')
+        progress, stop_reason = await self._zap_poll_scan(ctx, 'ascan', scan_id, self.config.zap_active_timeout)
         completed = progress >= 100
-        if not completed:
-            stop_reason = stop_reason or ("timeout" if deadline is not None else "finalizacion_solicitada")
-            if deadline is not None or self.config.runtime_control.finish_requested:
-                with contextlib.suppress(Exception):
-                    await self._zap_api("ascan/action/stop", {"scanId": scan_id}, timeout=20)
         messages = await self._zap_api("ascan/view/messagesIds", {"scanId": scan_id}, timeout=20)
         ids = messages.get("messagesIds", [])
-        return len(ids) if isinstance(ids, list) else 0, completed, progress, stop_reason
+        return len(ids) if isinstance(ids, list) else 0, completed, progress, '' if completed else stop_reason
 
     async def _zap_shutdown(self, process: asyncio.subprocess.Process | None) -> None:
         with contextlib.suppress(Exception):
@@ -4471,12 +4627,17 @@ class ExternalTools:
                 "stderr": 0,
                 "last_activity": started,
                 "last_output": "",
+                "last_progress": started,
+                "request_count": -1,
             }
+            log_stem = f"{Path(cmd[0]).stem}_{datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:6]}"
             stdout_task = asyncio.create_task(
-                self._read_stream_limited(process.stdout, stdout_buffer, stream_stats, "stdout")
+                self._read_stream_limited(process.stdout, stdout_buffer, stream_stats, "stdout",
+                                          self._external_report_path('process', log_stem + '.stdout.log'))
             )
             stderr_task = asyncio.create_task(
-                self._read_stream_limited(process.stderr, stderr_buffer, stream_stats, "stderr")
+                self._read_stream_limited(process.stderr, stderr_buffer, stream_stats, "stderr",
+                                          self._external_report_path('process', log_stem + '.stderr.log'))
             )
             wait_task = asyncio.create_task(process.wait())
             hard_timeout = max(0, int(timeout or 0))
@@ -4498,6 +4659,13 @@ class ExternalTools:
                             time.monotonic() - started,
                         )
                     now = time.monotonic()
+                    if Path(cmd[0]).stem.lower() == 'nuclei':
+                        idle_limit = getattr(self.config, 'nuclei_idle_timeout', 180)
+                        last_progress = (stream_stats['last_progress'] if stream_stats['request_count'] >= 0
+                                         else stream_stats['last_activity'])
+                        if now - last_progress >= idle_limit:
+                            stderr_buffer.extend(b'\nScan Titan: Nuclei stopped after progress watchdog timeout.\n')
+                            deadline = now
                     if deadline is not None and now >= deadline:
                         with contextlib.suppress(Exception):
                             await self._terminate_process_tree(process, force=False)
@@ -4570,30 +4738,49 @@ class ExternalTools:
         kept: bytearray | None = None,
         stats: dict[str, Any] | None = None,
         channel: str = "stdout",
+        raw_path: Path | None = None,
     ) -> bytes:
         if stream is None:
             return b""
         buffer = kept if kept is not None else bytearray()
         discarded = 0
+        raw_log = raw_path.open('ab') if raw_path else None
         try:
             while True:
                 chunk = await stream.read(65536)
                 if not chunk:
                     break
+                if raw_log:
+                    raw_log.write(chunk)
+                    raw_log.flush()
                 if stats is not None:
                     stats[channel] = int(stats.get(channel, 0)) + len(chunk)
                     stats["last_activity"] = time.monotonic()
                     last_line = chunk.decode(errors="replace").strip().splitlines()
                     if last_line:
                         stats["last_output"] = last_line[-1]
-                remaining = self.MAX_EXTERNAL_OUTPUT_BYTES - len(buffer)
-                if remaining > 0:
-                    buffer.extend(chunk[:remaining])
-                discarded += max(0, len(chunk) - max(0, remaining))
+                    for line in chunk.decode(errors='replace').splitlines():
+                        try:
+                            progress = json.loads(line)
+                            count = int(progress.get('requests', -1))
+                        except (ValueError, TypeError, AttributeError):
+                            continue
+                        if count > stats.get('request_count', -1):
+                            stats['request_count'] = count
+                            stats['last_progress'] = time.monotonic()
+                buffer.extend(chunk)
+                excess = len(buffer) - self.MAX_EXTERNAL_OUTPUT_BYTES
+                if excess > 0:
+                    midpoint = self.MAX_EXTERNAL_OUTPUT_BYTES // 2
+                    del buffer[midpoint:midpoint + excess]
+                    discarded += excess
         except (ConnectionResetError, OSError, ValueError) as exc:
             if stats is not None:
                 stats["last_activity"] = time.monotonic()
                 stats["last_output"] = f"stream cerrado: {clean_text(exc, 80)}"
+        finally:
+            if raw_log:
+                raw_log.close()
         if discarded:
             buffer.extend(f"\n[Scan Titan truncated {discarded} output bytes]".encode())
         return bytes(buffer)
@@ -4934,6 +5121,14 @@ class ExternalTools:
         return None
 
     def _parse_nmap(self, ctx: ScanContext, xml_text: str, profile: str = "nmap") -> list[Finding]:
+        if profile == 'ssh_security':
+            try:
+                findings, records = NmapSSHAuditor.parse(ctx.target.display, xml_text)
+                ctx.recon['ssh_audit'] = records
+                return findings
+            except ET.ParseError:
+                ctx.recon['ssh_audit'] = [{'state': 'incomplete_xml'}]
+                return []
         ports: list[str] = []
         services: list[str] = []
         ports_services: list[str] = []
@@ -5345,13 +5540,25 @@ class ExternalTools:
         cve_selector_args = self._nuclei_cve_selector_args()
         target_list = self._write_nuclei_target_list(ctx, slug, stamp)
         target_args = ["-l", str(target_list)]
+        broad_args = target_args
+        if getattr(self.config, 'nuclei_origin_only', True):
+            broad_list = target_list.with_name(target_list.stem + '_base.txt')
+            base = urllib.parse.urlsplit(ctx.target.url)
+            # Retain a configured application prefix without multiplying every
+            # host-level template by every discovered route.
+            broad_url = urllib.parse.urlunsplit((base.scheme, base.netloc, base.path or '/', '', ''))
+            broad_list.write_text(broad_url + '\n', encoding='utf-8')
+            broad_args = ['-l', str(broad_list)]
+        common_flags = [*common_flags, '-duc', '-jsonl', '-stats-json']
         return [
             (
                 "vulnerability_scan",
                 [
                     binary,
                     *common_flags,
-                    *target_args,
+                    *broad_args,
+                    "-exclude-tags",
+                    "cve,cves,misconfig,exposure,headers,tech",
                     "-severity",
                     "low,medium,high,critical",
                     "-rl",
@@ -5399,7 +5606,7 @@ class ExternalTools:
                 [
                     binary,
                     *common_flags,
-                    *target_args,
+                    *broad_args,
                     *cve_selector_args,
                     "-severity",
                     "low,medium,high,critical",
@@ -5434,6 +5641,9 @@ class ExternalTools:
         matched_locations: dict[tuple[str, ...], list[str]] = {}
         global_templates = {"django-debug-config-enabled"}
         for item in items:
+            if (not item.get('template-id') or not isinstance(item.get('info'), dict)
+                    or item.get('matcher-status') is False):
+                continue
             template_id = str(item.get("template-id") or "unknown")
             matcher_name = str(item.get("matcher-name") or "-")
             finding_type = str(item.get("type") or "-").lower()
@@ -5540,8 +5750,6 @@ class ExternalTools:
         parsed_count: int,
         parser_error: str,
     ) -> str:
-        if parsed_count:
-            return ""
         text = f"{stdout}\n{stderr}".lower()
         if timed_out:
             return "Nuclei agoto el timeout antes de completar el perfil."
@@ -5568,6 +5776,8 @@ class ExternalTools:
             return parser_error
         if returncode not in {0, None}:
             return f"Nuclei finalizo con codigo de salida no cero {returncode}."
+        if parsed_count:
+            return ""
         return "Nuclei completo correctamente: 0 hallazgos."
 
     def _parse_json_lines(self, text: str) -> list[dict[str, Any]]:
@@ -6121,6 +6331,7 @@ class ScanTitan:
         connector = aiohttp.TCPConnector(limit=25, limit_per_host=20, ttl_dns_cache=300)
         async with aiohttp.ClientSession(
             connector=connector,
+            cookie_jar=aiohttp.DummyCookieJar(),
             headers={
                 "User-Agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -6132,7 +6343,10 @@ class ScanTitan:
                 "Accept-Language": "en-US,en;q=0.9,es;q=0.8",
             },
             trust_env=True,
-        ) as session:
+        ) as session, SessionManager(
+            target.url, self.config.policy.auth_profiles, timeout=self.config.timeout,
+            verify_tls=self.config.verify_tls, control=self.config.runtime_control,
+        ) as sessions:
             http = AsyncHttpClient(
                 session=session,
                 semaphore=http_semaphore,
@@ -6195,6 +6409,8 @@ class ScanTitan:
                 ),
                 policy=self.config.policy,
             )
+            ctx.sessions = sessions
+            ctx.recon['session_profiles'] = sessions.summary()
             findings: list[Finding] = []
             if self.config.include_recon_info_findings:
                 findings.append(build_target_classification_finding(target))
@@ -6221,13 +6437,33 @@ class ScanTitan:
                 self._emit_new_findings(external_findings)
                 findings.extend(external_findings)
 
+        coverage_path = REPORTS_DIR / f"coverage_{self.reporter._slug(target.display)}_{datetime.now():%Y%m%d_%H%M%S}.json"
+        coverage_path.parent.mkdir(parents=True, exist_ok=True)
+        coverage = {key: value for key, value in recon.items() if key in {
+            'session_profiles', 'session_lifecycle', 'role_audit', 'stored_xss_results', 'race_results',
+            'race_candidates', 'websocket_results', 'ssh_audit', 'external_coverage',
+            'timeout_skips', 'module_errors', 'policy_deferred_tests',
+        }}
         timestamp = now_text()
         reportable_findings = correlate_findings(
             self._reportable_findings(findings),
             asset=target.ip or target.display,
         )
         self.scorer.apply(reportable_findings)
-        enriched = self.state.enrich(reportable_findings, target.display, timestamp)
+        incomplete = (self.config.runtime_control.finish_requested
+                      or bool(recon.get('timeout_skips'))
+                      or bool(recon.get('module_errors'))
+                      or any(item.get('state') != 'completed' for item in recon.get('external_coverage', [])))
+        coverage.update({'target': target.display, 'scanner': SCAN_VERSION,
+                         'evidence_file': str(coverage_path),
+                         'execution_state': 'partial' if incomplete else 'finished',
+                         'findings_before_reporting_filters': len(findings),
+                         'reportable_correlated_findings': len(reportable_findings)})
+        coverage_path.write_text(json.dumps(coverage, indent=2, ensure_ascii=False), encoding='utf-8')
+        Console.step(f"Cobertura y diagnostico: {coverage_path}")
+        if incomplete:
+            Console.warn('Cobertura incompleta: los hallazgos historicos ausentes conservan su estado anterior.')
+        enriched = self.state.enrich(reportable_findings, target.display, timestamp, complete=not incomplete)
         await asyncio.to_thread(
             self.evidence.attach_artifacts,
             enriched,
@@ -6235,7 +6471,7 @@ class ScanTitan:
             capture_browser=self.config.policy.browser_evidence,
         )
         self.state.sync_artifacts(enriched)
-        report_path = self.reporter.write_target_report(target, enriched, timestamp)
+        report_path = self.reporter.write_target_report(target, enriched, timestamp, coverage)
         recon_hits = recon.get("wordlist_path_hits", [])
         Console.step(
             f"Actualizacion compacta de Recon Matrix iniciada: objetivo={target.display} rutas_raw={len(recon_hits)}"
@@ -6409,6 +6645,7 @@ class ScanTitan:
             return timeout_findings
         except Exception as exc:
             Console.warn(f"{module.name}: {exc}")
+            ctx.recon.setdefault('module_errors', []).append({'module': module.name, 'reason': str(exc)})
             failed_findings = [
                 Finding(
                     target=ctx.target.display,

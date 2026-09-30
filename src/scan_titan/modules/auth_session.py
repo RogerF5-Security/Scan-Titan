@@ -317,6 +317,9 @@ class AuthSessionModule(VulnerabilityModule):
         return findings
 
     async def _session_regeneration_profiles(self, ctx: ScanContext) -> list[Finding]:
+        if ctx.sessions is not None:
+            # A reused cookie on an ordinary GET is not a login-boundary fixation proof.
+            return []
         findings: list[Finding] = []
         for idx, profile in enumerate(ctx.policy.auth_profiles[:4], start=1):
             headers = self._profile_headers(profile)

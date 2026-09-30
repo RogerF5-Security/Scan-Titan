@@ -4,7 +4,14 @@
 
 Motor comunitario de auditoria automatizada en Python: reconocimiento, pruebas web, orquestacion de herramientas externas y reportes de vulnerabilidades para profesionales y equipos de seguridad de cualquier region.
 
-**Version del motor:** 22.1.1. **Estado:** repositorio publico. [Web de Scan Titan](https://rogerf5-security.github.io/Scan-Titan/).
+**Version del motor:** 22.2.0. **Estado:** repositorio publico. [Web de Scan Titan](https://rogerf5-security.github.io/Scan-Titan/).
+
+**Upgrade Core:** [arquitectura y configuracion](docs/CORE_UPGRADE.md),
+[cobertura de 55 actividades](docs/METODOLOGIA_55.md) e
+[inventario de emisores de hallazgos](docs/FINDING_CATALOG.csv).
+Incluye sesiones por identidad, replay de roles, XSS almacenado con navegador,
+concurrencia real, SSH NSE y WebSockets. ZAP/Nuclei conservan evidencia parcial
+y exponen fallos/limites de cobertura.
 
 ![Captura de la web pública de Scan Titan](assets/scan-titan-web-screenshot.png)
 

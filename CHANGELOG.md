@@ -4,6 +4,16 @@ Este archivo registra los cambios funcionales verificables de cada version.
 
 Las versiones `21.3.2` y `21.3.3` documentan iteraciones locales verificadas que se consolidaron en `22.0.0`; no se publicaron como tags independientes.
 
+## [22.2.0] - 2026-09-29
+
+- SessionManager con identidades aisladas, login multipaso/CSRF, extraccion de tokens, renovacion y comprobacion de identidad/MFA.
+- Nuevos auditores de roles/IDOR, XSS almacenado validado en Chromium, rafagas concurrentes de 20–64 operaciones, WebSockets y revocacion tras logout.
+- SSH NSE: metodos de autenticacion, algoritmos ofrecidos y claves; contrasta configuracion efectiva sin basarse solo en banners.
+- Nuclei: perfiles acotados, menos repeticion de semillas, vigilancia de progreso, parser de estadisticas/JSONL parcial y logs completos.
+- ZAP: contexto propio, paginacion/checkpoints, recuperacion de alertas ante fallos, tiempos por etapa y daemon con estado/log separado.
+- Cobertura en reportes TXT/JSON y evidencia separada; un scan incompleto conserva el estado de hallazgos historicos no observados.
+- Documentacion de los 55 puntos, configuracion de ejemplo y pruebas locales positivas/negativas con motores externos reales.
+
 ## [22.1.1] - 2026-09-21
 
 - El cargador cuenta solo entradas reales y unicas, aplica el limite despues de deduplicar y deja de generar relleno hasta 10 000.

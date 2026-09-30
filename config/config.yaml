@@ -151,16 +151,19 @@ tools:
     enabled: true
     binary: nmap
     timeout_seconds: 1800
+    ssh_username: scan_titan_probe
     profiles:
       - network_vulnerability_scan
       - ssl_tls_surface
       - http_slowloris_check
       - vulners_cvss
+      - ssh_security
     profile_timeouts:
       network_vulnerability_scan: 1800
-      ssl_tls_surface: 480
+      ssl_tls_surface: 300
       http_slowloris_check: 600
-      vulners_cvss: 900
+      vulners_cvss: 300
+      ssh_security: 180
   ffuf:
     enabled: true
     binary: ffuf
@@ -194,18 +197,20 @@ tools:
     severity: critical,high,medium,low
     system_resolvers: true
     disable_host_error_skip: true
-    max_seed_urls: 60
+    max_seed_urls: 12
+    origin_only_broad_profiles: true
+    idle_timeout_seconds: 180
     retries: 1
     request_timeout_seconds: 10
-    timeout_seconds: 2400
+    timeout_seconds: 1500
     profiles:
       - vulnerability_scan
       - conservative_scan
       - cve_scan
     profile_timeouts:
-      vulnerability_scan: 1800
-      conservative_scan: 1200
-      cve_scan: 1200
+      vulnerability_scan: 600
+      conservative_scan: 300
+      cve_scan: 600
   zap:
     enabled: true
     binary: zap.bat
@@ -217,11 +222,12 @@ tools:
     host: 127.0.0.1
     port: 8090
     startup_timeout_seconds: 90
-    timeout_seconds: 3600
-    spider_timeout_seconds: 600
-    passive_timeout_seconds: 600
-    active_timeout_seconds: 1800
-    max_seed_urls: 60
+    timeout_seconds: 1800
+    spider_timeout_seconds: 180
+    passive_timeout_seconds: 120
+    active_timeout_seconds: 900
+    progress_timeout_seconds: 180
+    max_seed_urls: 20
     max_alerts: 250
     max_children: 20
 
@@ -259,6 +265,24 @@ external_observability:
   enabled: true
 
 auth_profiles: []
+
+# Configure identities and business invariants using config/stateful.example.yaml.
+# Each identity needs a check endpoint proving authentication. Secrets may use ${ENV_VAR}.
+stateful:
+  roles:
+    max_requests: 40
+    requests: []
+  stored_xss:
+    max_pages: 20
+    max_forms: 3
+    validate_browser: true
+  race:
+    max_cases: 3
+    cases: []
+  websockets:
+    max_endpoints: 10
+    endpoints: []
+
 
 exposed_files:
   paths:

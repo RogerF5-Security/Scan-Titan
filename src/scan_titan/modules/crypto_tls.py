@@ -82,7 +82,7 @@ class CryptoTlsModule(VulnerabilityModule):
     def _certificate_and_protocols(self, ctx: ScanContext) -> list[Finding]:
         findings: list[Finding] = []
         host = ctx.target.host
-        port = 443
+        port = ctx.target.port or 443
         try:
             context = ssl.create_default_context()
             with socket.create_connection((host, port), timeout=ctx.limits.timeout) as sock:

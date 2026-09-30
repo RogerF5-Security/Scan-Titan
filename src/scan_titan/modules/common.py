@@ -1050,6 +1050,7 @@ class ScanPolicy:
     browser_evidence: bool = True
     browser_evidence_max_per_target: int = 150
     auth_profiles: list[dict[str, Any]] = field(default_factory=list)
+    stateful: dict[str, Any] = field(default_factory=dict)
 
     def module_enabled(self, module_name: str) -> bool:
         normalized = str(module_name or "").strip().lower()
@@ -1092,6 +1093,7 @@ class ScanContext:
     recon: dict[str, Any]
     heartbeat: Callable[[str, str, int, int], None]
     policy: ScanPolicy = field(default_factory=ScanPolicy)
+    sessions: Any = None
 
     def should_stop(self) -> bool:
         control = self.limits.runtime_control

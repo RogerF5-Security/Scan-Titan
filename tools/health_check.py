@@ -38,6 +38,13 @@ def check_paths(root: Path) -> bool:
         root / "docs" / "web" / "index.html",
         root / "src" / "scan_titan" / "Main.py",
         root / "src" / "scan_titan" / "resource_monitor.py",
+        root / "src" / "scan_titan" / "session_manager.py",
+        root / "src" / "scan_titan" / "ssh_audit.py",
+        root / "src" / "scan_titan" / "modules" / "role_audit.py",
+        root / "src" / "scan_titan" / "modules" / "stored_xss.py",
+        root / "src" / "scan_titan" / "modules" / "race_conditions.py",
+        root / "src" / "scan_titan" / "modules" / "websocket_analyzer.py",
+        root / "src" / "scan_titan" / "modules" / "session_lifecycle.py",
         root / "src" / "scan_titan" / "modules" / "status_route_filter.py",
         root / "src" / "scan_titan" / "modules",
     ]

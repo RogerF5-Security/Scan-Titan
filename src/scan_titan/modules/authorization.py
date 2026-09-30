@@ -165,6 +165,9 @@ class AuthorizationModule(VulnerabilityModule):
         return out
 
     async def _auth_profile_matrix(self, ctx: ScanContext) -> list[Finding]:
+        if ctx.sessions is not None:
+            # The stateful role auditor owns verified identity comparisons.
+            return []
         profiles = ctx.policy.auth_profiles
         if not profiles:
             return []

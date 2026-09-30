@@ -21,6 +21,11 @@ from .sqli import SqliModule
 from .ssrf import SsrfModule
 from .waf_resilience import WafResilienceModule
 from .xss import XssModule
+from .role_audit import RoleAuditor
+from .stored_xss import StoredXSS_Auditor
+from .race_conditions import RaceCondition_Tester
+from .websocket_analyzer import WebSocket_Analyzer
+from .session_lifecycle import SessionLifecycleAuditor
 
 DEFAULT_MODULES = [
     ReconSurfaceModule,
@@ -34,6 +39,7 @@ DEFAULT_MODULES = [
     CryptoTlsModule,
     AuthSessionModule,
     AuthorizationModule,
+    RoleAuditor,
     SqliModule,
     LfiModule,
     SsrfModule,
@@ -43,5 +49,9 @@ DEFAULT_MODULES = [
     WafResilienceModule,
     ClientSideModule,
     BrowserAuditModule,
+    StoredXSS_Auditor,
+    RaceCondition_Tester,
+    WebSocket_Analyzer,
     AdvancedLogicModule,
+    SessionLifecycleAuditor,
 ]

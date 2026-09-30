@@ -62,7 +62,7 @@ python .\main.py -Full
 python .\main.py -full
 ```
 
-El modo full activa perfil profundo, motores externos, auditoria de navegador, tarjetas de evidencia y wordlists completas. Conserva limites estrictos ampliados para modulos y herramientas externas: un timeout cancela y drena el componente, registra el salto y permite continuar el pipeline.
+El modo full activa perfil profundo, motores externos, auditoria de navegador, tarjetas de evidencia y wordlists completas. Los motores y modulos tienen presupuestos finitos; `0` utiliza el valor de respaldo y no significa ejecucion ilimitada. Scan Titan mantiene heartbeat y telemetria para confirmar actividad.
 
 ## Control de Ejecucion
 
@@ -160,7 +160,7 @@ OWASP ZAP
 
 Si una herramienta falta, Scan Titan lo reporta en consola, `tool_inventory.json` y observabilidad externa. El motor Python interno continua ejecutandose.
 
-Por defecto, los procesos largos de Nmap, Nuclei y OWASP ZAP no tienen limite duro de tiempo (`0 = sin limite`). Cada proceso emite heartbeat con duracion, salida observada y ultimo mensaje util; si necesitas cerrar la jornada, usa `F` para finalizar ordenadamente y generar dashboard con lo encontrado.
+Nmap, Nuclei y OWASP ZAP tienen tiempos finitos configurables por perfil o etapa. Cada proceso emite heartbeat con duracion, salida observada y ultimo mensaje util; usa `F` para finalizar ordenadamente y generar dashboard con lo encontrado. Los fallos y timeouts conservan evidencia parcial. Consulta [CORE_UPGRADE.md](CORE_UPGRADE.md) para los valores y criterios de cobertura.
 
 ### WhatWeb
 

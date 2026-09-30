@@ -1,0 +1,80 @@
+# Merge the relevant sections into config/config.local.yaml.
+# Replace URLs/JSON paths with the application's contract. Missing secrets fail
+# only that profile; they are never printed. No real account is included here.
+auth_profiles:
+  - name: Admin
+    origins: [https://application.example]
+    login:
+      url: /api/login
+      method: POST
+      json: {username: "${TITAN_ADMIN_USER}", password: "${TITAN_ADMIN_PASSWORD}"}
+      expect: {statuses: [200]}
+    token: {json_path: access_token, header: Authorization, prefix: "Bearer "}
+    check: {url: /api/me, json_path: role, equals: admin}
+    refresh_after_seconds: 240
+    logout: {url: /api/logout, method: POST, expect: {statuses: [204]}}
+    mfa_challenge: {statuses: [200, 202], json_path: mfa_required, equals: true}
+  - name: User
+    origins: [https://application.example]
+    login:
+      url: /api/login
+      method: POST
+      json: {username: "${TITAN_USER}", password: "${TITAN_PASSWORD}"}
+    token: {json_path: access_token}
+    check: {url: /api/me, json_path: role, equals: user}
+    refresh_after_seconds: 240
+
+# Form login alternative inside a profile (cookie jar is handled automatically):
+# login:
+#   url: /login
+#   method: POST
+#   csrf: {url: /login, selector: 'input[name=csrf]', field: csrf}
+#   data: {username: '${TITAN_USER}', password: '${TITAN_PASSWORD}'}
+#   expect: {statuses: [200, 302, 303]}
+# check: {url: /api/me, json_path: username, equals: test-user}
+# Multi-step flows: login_steps: [<step 1>, <step 2>] with the same structure.
+# Refresh: refresh_steps: [...] or re-login automatically after the configured TTL.
+
+stateful:
+  roles:
+    max_requests: 40
+    requests:
+      - url: /api/admin/users/42
+        method: GET
+        allowed_profiles: [Admin]
+        sensitive_json_paths: [email]
+      # Add UserA/UserB profiles and owned resource IDs for horizontal IDOR.
+      # Mutations need replay_state_changing: true and an isolated test operation.
+  stored_xss:
+    profile: User
+    urls: [/comments, /profile]
+    max_pages: 20
+    max_forms: 3
+    validate_browser: true
+  race:
+    max_cases: 1
+    cases:
+      - profile: User
+        concurrency: 20
+        timeout_seconds: 30
+        request:
+          url: /api/coupons/redeem
+          method: POST
+          json: {coupon: AUDIT_SINGLE_USE_FIXTURE}
+        success: {statuses: [200, 201], json_path: accepted, equals: true}
+        success_id_path: redemption_id
+        max_successes: 1
+        verify:
+          url: /api/coupons/audit-state
+          value_path: redemption_count
+          max_delta: 1
+      # Multipart is supported with request.files:
+      #   document: {filename: canary.txt, content: audit-marker, content_type: text/plain}
+      # HTTP 200 repeated with the same redemption_id is not counted as multiple commits.
+  websockets:
+    max_endpoints: 10
+    endpoints:
+      - url: wss://application.example/ws/account
+        requires_auth: true
+        probe: {type: subscribe, channel: audit-fixture}
+        protected_contains: AUDIT_PRIVATE_MESSAGE_MARKER

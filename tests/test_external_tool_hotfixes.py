@@ -26,9 +26,9 @@ from modules.ssrf import SsrfModule  # noqa: E402
 
 def target() -> Target:
     return Target(
-        raw="https://fac.claro.com.gt/",
-        url="https://fac.claro.com.gt/",
-        host="fac.claro.com.gt",
+        raw="https://app.example.com/",
+        url="https://app.example.com/",
+        host="app.example.com",
         ip="192.0.2.10",
         scheme="https",
         port=443,
@@ -59,7 +59,7 @@ class ExternalToolHotfixTests(unittest.TestCase):
 
     def test_subfinder_uses_registrable_domain(self) -> None:
         tools = external_tools()
-        self.assertEqual(tools._registrable_domain("fac.claro.com.gt"), "claro.com.gt")
+        self.assertEqual(tools._registrable_domain("app.example.com"), "example.com")
         self.assertEqual(tools._registrable_domain("api.example.com"), "example.com")
         self.assertEqual(tools._registrable_domain("192.0.2.10"), "192.0.2.10")
 
@@ -69,7 +69,7 @@ class ExternalToolHotfixTests(unittest.TestCase):
             target=target(),
             recon={
                 "endpoints": [
-                    {"url": "https://fac.claro.com.gt/api/Quantitys", "params": []},
+                    {"url": "https://app.example.com/api/Quantitys", "params": []},
                     {"url": "https://evil.example/api", "params": []},
                 ],
                 "raw_routes": ["/login/?next=/", "/login/?next=/"],
@@ -78,13 +78,13 @@ class ExternalToolHotfixTests(unittest.TestCase):
         )
         seeds = tools._nuclei_seed_urls(ctx)
         self.assertEqual(len(seeds), 3)
-        self.assertIn("https://fac.claro.com.gt/api/Quantitys", seeds)
-        self.assertIn("https://fac.claro.com.gt/login/?next=/", seeds)
+        self.assertIn("https://app.example.com/api/Quantitys", seeds)
+        self.assertIn("https://app.example.com/login/?next=/", seeds)
         self.assertNotIn("https://evil.example/api", seeds)
         self.assertFalse(any(url.endswith(".css") for url in seeds))
 
     def test_every_nuclei_profile_uses_resolver_guard_target_list_and_jsonl(self) -> None:
-        ctx = SimpleNamespace(target=target(), recon={"endpoints": [{"url": "https://fac.claro.com.gt/login/"}]})
+        ctx = SimpleNamespace(target=target(), recon={"endpoints": [{"url": "https://app.example.com/login/"}]})
         with tempfile.TemporaryDirectory() as tmp, patch.object(titan_main, "REPORTS_DIR", Path(tmp)):
             tools = external_tools(external_reports_dir=Path(tmp) / "external reports")
             profiles = tools._nuclei_profiles("nuclei", ctx)
@@ -99,8 +99,11 @@ class ExternalToolHotfixTests(unittest.TestCase):
             conservative = next(command for name, command, _output in profiles if name == "conservative_scan")
             severity = conservative[conservative.index("-severity") + 1]
             self.assertIn("info", severity.split(","))
-            target_list = Path(profiles[0][1][profiles[0][1].index("-l") + 1])
-            self.assertIn("https://fac.claro.com.gt/login/", target_list.read_text(encoding="utf-8"))
+            target_list = Path(conservative[conservative.index("-l") + 1])
+            self.assertIn("https://app.example.com/login/", target_list.read_text(encoding="utf-8"))
+            broad = profiles[0][1]
+            broad_targets = Path(broad[broad.index('-l') + 1]).read_text(encoding='utf-8').splitlines()
+            self.assertEqual(broad_targets, ['https://app.example.com/'])
 
     def test_required_raw_external_outputs_use_central_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -151,8 +154,8 @@ class ExternalToolHotfixTests(unittest.TestCase):
         ctx = SimpleNamespace(target=target())
         record = (
             '{"template-id":"http-missing-security-headers","matcher-name":"content-security-policy",'
-            '"type":"http","host":"https://fac.claro.com.gt",'
-            '"matched-at":"https://fac.claro.com.gt/login/",'
+            '"type":"http","host":"https://app.example.com",'
+            '"matched-at":"https://app.example.com/login/",'
             '"info":{"name":"Missing security headers","severity":"info"}}'
         )
         with tempfile.TemporaryDirectory() as tmp:

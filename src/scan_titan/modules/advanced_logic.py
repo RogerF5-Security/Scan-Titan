@@ -13,8 +13,9 @@ class AdvancedLogicModule(VulnerabilityModule):
 
     async def run(self, ctx: ScanContext) -> list[Finding]:
         findings: list[Finding] = []
-        findings.extend(await self._websockets(ctx))
-        findings.extend(await self._race_conditions(ctx))
+        if ctx.sessions is None:
+            findings.extend(await self._websockets(ctx))
+            findings.extend(await self._race_conditions(ctx))
         findings.extend(await self._logs(ctx))
         return findings
 
