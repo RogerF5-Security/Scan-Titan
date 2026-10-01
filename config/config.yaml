@@ -35,6 +35,7 @@ scan:
   max_tests_per_module: 10000
   max_wordlist_entries: 50000
   module_test_budgets:
+    service_access: 16
     recon_surface: 10000
     api_spa: 10000
     api_dast: 10000
@@ -58,6 +59,7 @@ scan:
     browser_audit: 120
     advanced_logic: 220
   module_timeout_overrides:
+    service_access: 240
     recon_surface: 600
     api_spa: 300
     api_dast: 600
@@ -158,12 +160,14 @@ tools:
       - http_slowloris_check
       - vulners_cvss
       - ssh_security
+      - smb_security
     profile_timeouts:
       network_vulnerability_scan: 1800
       ssl_tls_surface: 300
       http_slowloris_check: 600
       vulners_cvss: 300
       ssh_security: 180
+      smb_security: 180
   ffuf:
     enabled: true
     binary: ffuf
@@ -269,8 +273,17 @@ auth_profiles: []
 # Configure identities and business invariants using config/stateful.example.yaml.
 # Each identity needs a check endpoint proving authentication. Secrets may use ${ENV_VAR}.
 stateful:
+  services:
+    enabled: true
+    ftp_ports: [21]
+    smb_ports: [445, 139]
+    smb_shares: [SharedDocs, Public, Users, 'C$', 'ADMIN$']
+  ssrf:
+    # Controlled URL whose response has a secret marker NOT present in its URL.
+    probes: []
   roles:
     max_requests: 40
+    objects: []
     requests: []
   stored_xss:
     max_pages: 20

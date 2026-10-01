@@ -20,8 +20,14 @@ class RoleAuditor(VulnerabilityModule):
             return []
         config = ctx.policy.stateful.get('roles', {})
         configured = config.get('requests', [])
+        # Known owned objects exercise horizontal authorization without guessing IDs.
+        objects = []
+        for item in config.get('objects', [])[:40]:
+            if item.get('owner_profile') and item.get('url'):
+                objects.append({**item, 'allowed_profiles': item.get('allowed_profiles') or [item['owner_profile']],
+                                'object_test': True})
         discovered = [item for item in ctx.recon.get('endpoints', []) if isinstance(item, dict)]
-        requests = [*configured, *discovered][:int(config.get('max_requests', 40))]
+        requests = [*objects, *configured, *discovered][:int(config.get('max_requests', 40))]
         identities = ['Unauth', *manager.authenticated_names()]
         records: list[dict[str, Any]] = []
         findings: list[Finding] = []
@@ -80,12 +86,15 @@ class RoleAuditor(VulnerabilityModule):
                     if protected:
                         findings.append(Finding(
                             target=ctx.target.display, category='Authorization', severity='High',
-                            title=f'Protected resource accessible to disallowed profile: {name}',
+                            title=(f'IDOR: objeto de {owner} accesible por {name}' if raw.get('object_test') else
+                                   f'Falta de autenticacion: recurso protegido accesible sin credenciales' if name == 'Unauth' else
+                                   f'Autorizacion: recurso protegido accesible por {name}'),
                             url=spec.url, method=spec.method, source=self.name, confidence='high',
                             evidence=(f'Allowed={owner}; disallowed={name}; protected content matched; '
                                       f'status={response.status}; similarity={similarity:.4f}; '
                                       f'lengths={reference.body_len}/{response.body_len}'),
-                            cwe='CWE-639', recommendation='Enforce object ownership and role authorization server-side.'))
+                            cwe='CWE-306' if name == 'Unauth' else 'CWE-639',
+                            recommendation='Enforce object ownership and role authorization server-side.'))
                         record['state'] = 'access_violation'
                         break
                 records.append(record)

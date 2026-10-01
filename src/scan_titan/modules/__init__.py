@@ -26,8 +26,10 @@ from .stored_xss import StoredXSS_Auditor
 from .race_conditions import RaceCondition_Tester
 from .websocket_analyzer import WebSocket_Analyzer
 from .session_lifecycle import SessionLifecycleAuditor
+from .service_access import ServiceAccessAuditor
 
 DEFAULT_MODULES = [
+    ServiceAccessAuditor,
     ReconSurfaceModule,
     ApiSpaModule,
     ApiDastModule,

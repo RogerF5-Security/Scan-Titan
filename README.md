@@ -4,7 +4,7 @@
 
 Motor comunitario de auditoria automatizada en Python: reconocimiento, pruebas web, orquestacion de herramientas externas y reportes de vulnerabilidades para profesionales y equipos de seguridad de cualquier region.
 
-**Version del motor:** 22.2.0. **Estado:** repositorio publico. [Web de Scan Titan](https://rogerf5-security.github.io/Scan-Titan/).
+**Version del motor:** 22.3.0. **Estado:** repositorio publico. [Web de Scan Titan](https://rogerf5-security.github.io/Scan-Titan/).
 
 **Upgrade Core:** [arquitectura y configuracion](docs/CORE_UPGRADE.md),
 [cobertura de 55 actividades](docs/METODOLOGIA_55.md) e
@@ -112,3 +112,7 @@ python -B -m unittest discover -s tests -v
 ```
 
 Las comprobaciones de GitHub validan el paquete y sus pruebas en Windows y Linux. No ejecutan escaneos contra objetivos externos ni acreditan una instalacion completa de todos los motores.
+
+### Servicios y autenticacion (22.3.0)
+
+Revision FTP/SMB sin credenciales, identificacion de sistemas heredados, MS17-010 NSE, IDOR por propietario, doble prueba RCE y SSRF con respuesta controlada. [Cobertura, ejemplos y limites](docs/SERVICE_ACCESS.md).

@@ -89,3 +89,7 @@ probes parciales para algunas familias; su presencia no confirma cobertura total
 El upgrade mejora los puntos 13, 16, 22, 23, 35, 36 y la inspección SSH. **No permite
 declarar los 55 puntos auditados de extremo a extremo sin configuración y revisión
 específica de la aplicación.**
+
+## Ampliacion 22.3.0
+
+FTP/SMB, IDOR por propietario, RCE con doble prueba y SSRF con respuesta controlada: consultar [SERVICE_ACCESS.md](SERVICE_ACCESS.md). La cobertura sigue siendo parcial/configurable segun el protocolo y los datos disponibles.

@@ -399,8 +399,11 @@ def false_positive_risk_label_es(value: Any) -> str:
 
 
 def url_with_params(url: str, params: dict[str, Any]) -> str:
-    separator = "&" if "?" in url else "?"
-    return f"{url}{separator}{urllib.parse.urlencode(params, doseq=True)}"
+    parsed = urllib.parse.urlsplit(url)
+    pairs = [(key, value) for key, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+             if key not in params]
+    query = urllib.parse.urlencode(pairs) + ('&' if pairs and params else '') + urllib.parse.urlencode(params, doseq=True)
+    return urllib.parse.urlunsplit(parsed._replace(query=query))
 
 
 def stable_url(value: str) -> str:
@@ -1217,6 +1220,9 @@ class AsyncHttpClient:
     ) -> HttpResult | None:
         if self._stop_requested():
             return None
+        if params:
+            url = url_with_params(url, params)
+            params = None
         if self.limits.runtime_control:
             await self.limits.runtime_control.wait_if_paused()
             if self.limits.runtime_control.finish_requested:

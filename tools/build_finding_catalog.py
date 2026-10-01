@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def build() -> int:
     rows = []
     files = sorted((ROOT / 'src' / 'scan_titan' / 'modules').glob('*.py'))
-    files += [ROOT / 'src' / 'scan_titan' / name for name in ('Main.py', 'ssh_audit.py')]
+    files += [ROOT / 'src' / 'scan_titan' / name for name in ('Main.py', 'ssh_audit.py', 'service_audit.py', 'network_audit.py')]
     legacy = {('auth_session.py', '_session_regeneration_profiles'),
               ('authorization.py', '_auth_profile_matrix'),
               ('advanced_logic.py', '_race_conditions'), ('advanced_logic.py', '_websockets')}

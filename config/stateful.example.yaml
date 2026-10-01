@@ -36,8 +36,24 @@ auth_profiles:
 # Refresh: refresh_steps: [...] or re-login automatically after the configured TTL.
 
 stateful:
+  services:
+    enabled: true
+    ftp_ports: [21]
+    smb_ports: [445, 139]
+    smb_shares: [SharedDocs, Public, Users, 'C$', 'ADMIN$']
+  ssrf:
+    # This marker must exist only in the controlled server's response body.
+    # Do not use a public third-party service or put the marker in its URL.
+    probes:
+      - url: https://proof.example/ssrf-check
+        expected_body: replace-with-unique-secret-response-marker
   roles:
     max_requests: 40
+    objects:
+      - url: /api/orders/42
+        owner_profile: User
+        allowed_profiles: [User, Admin]
+        sensitive_json_paths: [private_invoice_reference]
     requests:
       - url: /api/admin/users/42
         method: GET

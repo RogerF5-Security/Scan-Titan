@@ -4,6 +4,15 @@ Este archivo registra los cambios funcionales verificables de cada version.
 
 Las versiones `21.3.2` y `21.3.3` documentan iteraciones locales verificadas que se consolidaron en `22.0.0`; no se publicaron como tags independientes.
 
+## [22.3.0] - 2026-10-01
+
+- FTP/SMB: evidencia de acceso anonimo a directorios/recursos, servidor/SO y autenticacion.
+- SMB NSE: MS17-010, protocolos y firma; alternativa nativa SMB1 sin Impacket.
+- IDOR por propietario; RCE con dos pruebas aritmeticas y SSRF con respuesta controlada.
+- Correccion de parametros duplicados y falsos positivos de autenticacion por HTTP 200.
+- Pipeline para objetivos sin HTTP; cobertura parcial explicita y procesos acotados.
+- Configuracion y limites documentados en docs/SERVICE_ACCESS.md.
+
 ## [22.2.0] - 2026-09-29
 
 - SessionManager con identidades aisladas, login multipaso/CSRF, extraccion de tokens, renovacion y comprobacion de identidad/MFA.

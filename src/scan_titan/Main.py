@@ -75,6 +75,7 @@ from recon_manager import ReconMatrixManager
 from resource_monitor import ProcessTreeSampler
 from session_manager import SessionManager
 from ssh_audit import NmapSSHAuditor
+from network_audit import NmapNetworkAuditor
 
 try:
     from technical_detail_exporter import TechnicalDetailExporter, TechnicalDetailOptions
@@ -245,7 +246,7 @@ KNOWLEDGE_FILE = _path_from_env(
     "SCAN_TITAN_KNOWLEDGE_FILE",
     _first_existing(BASE_DIR / "data" / "scan_titan_knowledge.json", BASE_DIR / "scan_titan_knowledge.json"),
 )
-SCAN_VERSION = "TITAN v22.2.0 COMMUNITY ZERO-TOUCH"
+SCAN_VERSION = "TITAN v22.3.0 COMMUNITY ZERO-TOUCH"
 HEADER_SEPARATOR = "=" * 72
 REPORT_SEPARATOR = "─" * 72
 
@@ -679,7 +680,7 @@ class Console:
 {Fore.RED}  ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝       ╚═╝   ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝
 {Fore.YELLOW}        [ SCAN TITAN :: WALL-BREACH VULNERABILITY ENGINE ]
 {Fore.CYAN}        [ ZERO-TOUCH | RECON | DAST | NMAP | NUCLEI | EVIDENCE ]
-{Fore.MAGENTA}        [ SCAN TITAN COMMUNITY | TATAKAE | ⚔️ v22.2.0 ⚔️ ]
+{Fore.MAGENTA}        [ SCAN TITAN COMMUNITY | TATAKAE | ⚔️ v22.3.0 ⚔️ ]
 """
         )
 
@@ -2354,6 +2355,9 @@ class ExternalTools:
         if self.config.skip_external:
             Console.warn("Herramientas externas omitidas por configuracion")
             return []
+        if ctx.recon.get('http_availability', {}).get('state') == 'unreachable':
+            ctx.recon.setdefault('policy_deferred_tests', []).append('web_tools_no_http_response')
+            return await self.run_nmap(ctx) if self.config.policy.enable_nmap else []
         findings: list[Finding] = []
         if self.config.policy.enable_whatweb:
             try:
@@ -2866,7 +2870,11 @@ class ExternalTools:
         profiles.append(('ssh_security', NmapSSHAuditor.command(
             binary, nmap_target, list(ssh_ports), ssh_output,
             getattr(self.config, 'ssh_username', 'scan_titan_probe')), ssh_output))
+        smb_output = xml_path('smb_security')
+        profiles.append(('smb_security', NmapNetworkAuditor.command(binary, nmap_target, smb_output), smb_output))
         profiles = [item for item in profiles if self.config.external_profile_enabled("nmap", item[0])]
+        if ctx.recon.get('http_availability', {}).get('state') == 'unreachable':
+            profiles = [item for item in profiles if item[0] not in {'ssl_tls_surface', 'http_slowloris_check'}]
         if not profiles:
             Console.warn("Nmap omitido: no hay perfiles habilitados en config.yaml")
             return []
@@ -5121,6 +5129,14 @@ class ExternalTools:
         return None
 
     def _parse_nmap(self, ctx: ScanContext, xml_text: str, profile: str = "nmap") -> list[Finding]:
+        if profile == 'smb_security':
+            try:
+                findings, records = NmapNetworkAuditor.parse(ctx.target.display, xml_text)
+                ctx.recon['smb_nse'] = records
+                return findings
+            except ET.ParseError:
+                ctx.recon['smb_nse'] = [{'state': 'incomplete_xml'}]
+                return []
         if profile == 'ssh_security':
             try:
                 findings, records = NmapSSHAuditor.parse(ctx.target.display, xml_text)
@@ -6411,6 +6427,11 @@ class ScanTitan:
             )
             ctx.sessions = sessions
             ctx.recon['session_profiles'] = sessions.summary()
+            web_probe = await http.request('GET', target.url, allow_redirects=False)
+            if web_probe is None:
+                web_probe = await http.request('GET', target.url, allow_redirects=False)
+            ctx.recon['http_availability'] = {'state': 'observed' if web_probe else 'unreachable',
+                                              'url': target.url}
             findings: list[Finding] = []
             if self.config.include_recon_info_findings:
                 findings.append(build_target_classification_finding(target))
@@ -6420,6 +6441,9 @@ class ScanTitan:
                     Console.warn(f"Finalizacion ordenada antes del siguiente modulo en {target.display}")
                     break
                 module = module_cls()
+                if web_probe is None and module.name not in {'service_access', 'infra_network'}:
+                    ctx.recon.setdefault('policy_deferred_tests', []).append(f'{module.name}:no_http_response')
+                    continue
                 if not self.config.policy.module_enabled(module.name):
                     Console.warn(f"MODULE SKIPPED BY POLICY: {module.name}")
                     continue
@@ -6442,6 +6466,7 @@ class ScanTitan:
         coverage = {key: value for key, value in recon.items() if key in {
             'session_profiles', 'session_lifecycle', 'role_audit', 'stored_xss_results', 'race_results',
             'race_candidates', 'websocket_results', 'ssh_audit', 'external_coverage',
+            'service_access', 'smb_nse', 'ssrf_status', 'ssrf_note', 'rce_checks', 'http_availability',
             'timeout_skips', 'module_errors', 'policy_deferred_tests',
         }}
         timestamp = now_text()
@@ -6453,7 +6478,11 @@ class ScanTitan:
         incomplete = (self.config.runtime_control.finish_requested
                       or bool(recon.get('timeout_skips'))
                       or bool(recon.get('module_errors'))
-                      or any(item.get('state') != 'completed' for item in recon.get('external_coverage', [])))
+                      or any(item.get('state') != 'completed' for item in recon.get('external_coverage', []))
+                      or any(item.get('state') in {'partial', 'error', 'timeout', 'dependency_missing'}
+                             for item in recon.get('service_access', []))
+                      or any(item.get('state') in {'partial', 'error', 'incomplete_xml'} for item in recon.get('smb_nse', []))
+                      or recon.get('http_availability', {}).get('state') == 'unreachable')
         coverage.update({'target': target.display, 'scanner': SCAN_VERSION,
                          'evidence_file': str(coverage_path),
                          'execution_state': 'partial' if incomplete else 'finished',

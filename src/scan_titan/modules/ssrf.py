@@ -21,7 +21,7 @@ def ssrf_response_proven(
     baseline: object | None = None,
 ) -> tuple[bool, str]:
     """Accept only concrete internal-service output, never a reflected URL/payload."""
-    if result is None or int(getattr(result, "status", 0) or 0) != 200 or not proof_markers:
+    if baseline is None or result is None or int(getattr(result, "status", 0) or 0) != 200 or not proof_markers:
         return False, ""
     body = str(getattr(result, "text", "") or "")[:12000]
     lower = body.lower()
@@ -97,6 +97,11 @@ class SsrfModule(VulnerabilityModule):
 
     async def run(self, ctx: ScanContext) -> list[Finding]:
         payloads = list(self.SAFE_PAYLOADS)
+        for proof in ctx.policy.stateful.get('ssrf', {}).get('probes', [])[:5]:
+            url, marker = str(proof.get('url', '')), str(proof.get('expected_body', ''))
+            parsed = urllib.parse.urlsplit(url)
+            if parsed.scheme in {'http', 'https'} and parsed.hostname and len(marker) >= 16 and marker not in url:
+                payloads.insert(0, (url, (marker,)))
         if ctx.limits.allow_cloud_ssrf:
             payloads.extend(self.CLOUD_PAYLOADS)
         targets = self._candidate_params(ctx)
@@ -118,7 +123,7 @@ class SsrfModule(VulnerabilityModule):
                 "GET",
                 url,
                 params={param: "scan_titan_control"},
-                allow_redirects=True,
+                allow_redirects=False,
                 timeout=max(ctx.limits.timeout, 8),
             )
 
@@ -134,7 +139,7 @@ class SsrfModule(VulnerabilityModule):
                 "GET",
                 url,
                 params={param: payload},
-                allow_redirects=True,
+                allow_redirects=False,
                 timeout=max(ctx.limits.timeout, 8),
             )
             async with lock:
@@ -146,12 +151,15 @@ class SsrfModule(VulnerabilityModule):
             proven, marker = ssrf_response_proven(result, payload, proof_markers, baseline)
             if not proven:
                 return
+            confirmation = await ctx.http.request('GET', url, params={param: payload}, allow_redirects=False)
+            if not ssrf_response_proven(confirmation, payload, proof_markers, baseline)[0]:
+                return
             findings.append(
                 Finding(
                     target=ctx.target.display,
                     category="SSRF",
-                    severity="Critical",
-                    title=f"Confirmed SSRF internal metadata response: {param}",
+                    severity="High",
+                    title=f"SSRF: respuesta del recurso remoto confirmada: {param}",
                     url=url_with_params(url, {param: payload}),
                     endpoint=urllib.parse.urlparse(url).path or "/",
                     param=param,
@@ -161,7 +169,7 @@ class SsrfModule(VulnerabilityModule):
                     size=f"{result.body_len}b",
                     elapsed=f"{result.elapsed:.2f}s",
                     evidence=clean_text(
-                        f"Internal metadata marker observed after reflection stripping: {marker} | {result.text}",
+                        f"Remote response marker observed twice after reflection stripping: {marker}",
                         600,
                     ),
                     source=self.name,
@@ -189,14 +197,21 @@ class SsrfModule(VulnerabilityModule):
             item_timeout=max(10.0, float(ctx.limits.timeout) * 2.0),
             on_timeout=lambda item, seconds: record_probe_timeout(ctx, self.name, item, seconds),
         )
+        ctx.recon['ssrf_status'] = 'confirmed' if findings else 'not_confirmed'
+        ctx.recon['ssrf_note'] = ('Pruebas con marcadores de respuesta habilitadas.' if any(markers for _, markers in payloads)
+                                  else 'Solo sondeos sin prueba de respuesta; configurar stateful.ssrf.probes para confirmar SSRF.')
         return findings
 
     def _candidate_params(self, ctx: ScanContext) -> list[tuple[str, str]]:
         out: list[tuple[str, str]] = []
-        for endpoint in ctx.recon.get("endpoints", [])[:60]:
+        endpoints = [{'url': ctx.target.url, 'params': list(urllib.parse.parse_qs(urllib.parse.urlsplit(ctx.target.url).query))},
+                     *ctx.recon.get("endpoints", [])[:60]]
+        for endpoint in endpoints:
             url = endpoint.get("url")
             params = endpoint.get("params") or []
             if not url:
+                continue
+            if urllib.parse.urlsplit(url).netloc != urllib.parse.urlsplit(ctx.target.url).netloc:
                 continue
             for param in params:
                 if any(token in param.lower() for token in self.PARAMS):

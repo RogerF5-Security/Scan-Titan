@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 import urllib.parse
+import uuid
 from typing import Any
 
 import aiohttp
@@ -26,7 +27,7 @@ def differential_output_proven(result: Any, baseline: Any, expected: str) -> boo
     """Require a successful response with new transformed output absent from control."""
     if result is None or baseline is None:
         return False
-    if int(getattr(result, "status", 0) or 0) >= 400:
+    if not 200 <= int(getattr(result, "status", 0) or 0) < 300:
         return False
     result_text = str(getattr(result, "text", "") or "")
     baseline_text = str(getattr(baseline, "text", "") or "")
@@ -161,21 +162,33 @@ class InjectionModule(VulnerabilityModule):
         findings = []
         tested = 0
         for url, params in candidates:
-            for param in params[:12]:
+            for param in params[:24]:
                 if not any(x in param.lower() for x in ["cmd", "exec", "host", "ip", "domain", "url", "ping", "query"]):
                     continue
                 baseline = await ctx.http.request("GET", url, params={param: "scan_titan_control"})
-                for payload, expected, engine in self._command_probes(url, param):
+                for probe_index, (payload, expected, engine) in enumerate(self._command_probes(url, param)):
                     if tested >= ctx.limits.max_tests_per_module:
                         return findings
                     tested += 1
                     ctx.heartbeat("command_injection", f"{param}={payload}", tested, len(findings))
                     result = await ctx.http.request("GET", url, params={param: payload})
                     if differential_output_proven(result, baseline, expected):
+                        second_payload, second_expected, _ = self._command_probes(
+                            url + '#' + uuid.uuid4().hex, param)[probe_index]
+                        confirmation = await ctx.http.request("GET", url, params={param: second_payload},
+                                                              allow_redirects=False)
+                        tested += 1
+                        if (second_expected == expected or
+                                not differential_output_proven(confirmation, baseline, second_expected) or
+                                _standalone_token(result.text, second_expected)):
+                            continue
+                        ctx.recon.setdefault('rce_checks', []).append({
+                            'url': url, 'param': param, 'engine': engine,
+                            'state': 'confirmed_two_outputs', 'outputs': [expected, second_expected]})
                         findings.append(
                             self._finding(
                                 ctx,
-                                "Command Injection",
+                                "RCE / Command Injection",
                                 "Critical",
                                 url,
                                 param,
@@ -183,7 +196,8 @@ class InjectionModule(VulnerabilityModule):
                                 result,
                                 (
                                     f"Differential arithmetic command proof ({engine}): output {expected} "
-                                    "appeared only after the active payload and the control response did not contain it."
+                                    f"confirmed by a second independent result {second_expected}; "
+                                    "neither result was present in the control response."
                                 ),
                             )
                         )
@@ -370,7 +384,8 @@ class InjectionModule(VulnerabilityModule):
         )
 
     def _candidates(self, ctx: ScanContext) -> list[tuple[str, list[str]]]:
-        out = [(ctx.target.url, self.PARAMS)]
+        observed = list(urllib.parse.parse_qs(urllib.parse.urlsplit(ctx.target.url).query))
+        out = [(ctx.target.url, observed or self.PARAMS)]
         for endpoint in ctx.recon.get("endpoints", [])[:80]:
             url = endpoint.get("url")
             params = endpoint.get("params") or []

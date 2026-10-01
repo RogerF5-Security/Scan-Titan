@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 REQUIRED_IMPORTS = ("aiohttp", "yaml", "openpyxl", "pandas", "bs4", "PIL", "psutil")
-OPTIONAL_IMPORTS = ("playwright", "win32gui")
+OPTIONAL_IMPORTS = ("playwright", "win32gui", "impacket")
 EXTERNAL_TOOLS = ("nmap", "nuclei", "ffuf", "whatweb", "subfinder", "wafw00f")
 ZAP_WINDOWS_CANDIDATES = (
     Path(r"C:\Program Files\ZAP\Zed Attack Proxy\zap.bat"),

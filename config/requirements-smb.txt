@@ -1,0 +1,2 @@
+# Optional SMB1/2/3 backend on Windows; native Nmap SMB1 fallback remains available.
+impacket>=0.12,<1

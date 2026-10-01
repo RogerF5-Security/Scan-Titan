@@ -48,7 +48,7 @@ class AuthorizationModule(VulnerabilityModule):
                     Finding(
                         target=ctx.target.display,
                         category="Authorization",
-                        severity="Medium",
+                        severity="Info",
                         title=f"Sensitive route returned 200: {path}",
                         url=url,
                         endpoint=path,

@@ -35,6 +35,9 @@ jobs:
           cache-dependency-path: config/requirements.txt
       - name: Instalar dependencias Python
         run: python -m pip install -r config/requirements.txt
+      - name: Preparar Nmap para pruebas SMB locales
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y nmap
       - name: Probar paquete y reportes sin escanear
         run: python -B -m unittest discover -s tests -v
       - name: Comprobar ayuda

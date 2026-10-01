@@ -118,13 +118,13 @@ class AuthSessionModule(VulnerabilityModule):
                     Finding(
                         target=ctx.target.display,
                         category="Auth",
-                        severity="High",
-                        title=f"Potential unauthenticated protected route: {path}",
+                        severity="Info",
+                        title=f"Authentication review candidate: {path}",
                         url=url,
                         endpoint=path,
                         method="GET",
                         status=str(result.status),
-                        evidence="Protected-looking route returned 200 without login challenge.",
+                        evidence="HTTP 200 without login challenge; protected content or intended access policy not established.",
                         source=self.name,
                         confidence="medium",
                     )
