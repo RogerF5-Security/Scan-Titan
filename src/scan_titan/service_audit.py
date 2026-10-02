@@ -112,7 +112,8 @@ def parse_smb_access_xml(root: ET.Element) -> dict[str, Any]:
         for share in table.findall("table"):
             details = {e.get("key"): e.text or "" for e in share.findall("elem")}
             session["shares"].append({"name": share.get("key", ""), "list_root": details.get("list_root") == "true",
-                                      "entries_observed": details.get("entries_observed", "0")})
+                                      "entries_observed": details.get("entries_observed", "0"),
+                                      "error": details.get("error", "")})
         result["sessions"].append(session)
     return result
 

@@ -199,8 +199,8 @@ class InfraNetworkModule(VulnerabilityModule):
                     Finding(
                         target=ctx.target.display,
                         category="Infra",
-                        severity="High",
-                        title="IP restriction bypass via forwarding header",
+                        severity="Info",
+                        title="IP restriction bypass candidate via forwarding header",
                         url=ctx.target.url,
                         method="GET",
                         payload=str(headers),

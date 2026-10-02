@@ -52,8 +52,8 @@ stateful:
 ```
 
 Las operaciones tienen límites de tiempo y cantidad. La alternativa Nmap prueba
-solo los recursos configurados y hasta 8 por identidad; usa SMB1 y exige al menos
-una entrada devuelta para confirmar el listado. Puede omitir directorios vacíos.
+solo los recursos configurados y hasta 8 por identidad; usa SMB1 y exige una
+respuesta de listado válida, con límites y longitudes comprobados.
 Impacket enumera recursos y admite SMB2/3. Los resultados conservan backend y estado.
 
 ### Dependencias

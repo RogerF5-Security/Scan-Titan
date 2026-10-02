@@ -140,6 +140,9 @@ class SMBEvidenceTests(unittest.TestCase):
                         native = audit_smb_nmap('127.0.0.1', port, ['Public'])
                         self.assertTrue(any(s.get('list_root') for identity in native['sessions']
                                             for s in identity['shares']), native)
+                        denied = audit_smb_nmap('127.0.0.1', port, ['MISSING_SHARE'])
+                        self.assertFalse(any(s.get('list_root') for identity in denied['sessions']
+                                             for s in identity['shares']), denied)
                 finally:
                     process.kill()
                     process.wait(timeout=5)
@@ -323,3 +326,16 @@ class WebProofTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.text, '91357')
         self.assertNotIn('cmd=old', response.final_url)
         self.assertIn('other=keep', response.final_url)
+
+    async def test_generic_login_success_text_is_not_confirmed_auth_bypass(self):
+        from modules.auth_session import AuthSessionModule
+        ctx = self.context('/login')
+        ctx.http = SimpleNamespace(request=AsyncMock(return_value=HttpResult(
+            self.base, self.base, 200, {}, 'Welcome to the session dashboard demo', 42, 0.01)))
+        forms = [{'action': self.base + '/login', 'method': 'POST',
+                  'fields': {'username': {'value': ''}, 'password': {'value': ''}}}]
+        module = AuthSessionModule()
+        findings = await module._login_bypass(ctx, forms)
+        findings += await module._controlled_credential_probe(ctx, forms)
+        self.assertTrue(findings)
+        self.assertTrue(all(f.severity == 'Info' for f in findings))

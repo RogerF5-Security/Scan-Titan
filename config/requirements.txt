@@ -9,6 +9,7 @@ plotly
 openpyxl
 Pillow
 playwright
+psutil
 pywin32; platform_system == "Windows"
 wafw00f
 impacket>=0.12,<1; platform_system != "Windows"

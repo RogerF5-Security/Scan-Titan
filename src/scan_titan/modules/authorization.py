@@ -99,7 +99,7 @@ class AuthorizationModule(VulnerabilityModule):
                     Finding(
                         target=ctx.target.display,
                         category="Authorization",
-                        severity="High",
+                        severity="Info",
                         title=f"Header-based authorization bypass signal: {path}",
                         url=url,
                         endpoint=path,

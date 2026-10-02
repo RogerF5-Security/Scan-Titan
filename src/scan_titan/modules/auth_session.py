@@ -91,13 +91,13 @@ class AuthSessionModule(VulnerabilityModule):
                         Finding(
                             target=ctx.target.display,
                             category="Auth",
-                            severity="Critical",
-                            title="Weak credential accepted",
+                            severity="Info",
+                            title="Credential probe candidate; identity not verified",
                             url=form["action"],
                             method=form["method"],
                             payload=f"{username}:{password}",
                             status=str(result.status),
-                            evidence=f"Location={location or '-'}",
+                            evidence=f"Location={location or '-'}; generic login signal only. Verify identity and protected access with SessionManager.",
                             source=self.name,
                             confidence="medium",
                         )
@@ -158,13 +158,13 @@ class AuthSessionModule(VulnerabilityModule):
                         Finding(
                             target=ctx.target.display,
                             category="Auth",
-                            severity="Critical",
-                            title="Login bypass signal with injection payload",
+                            severity="Info",
+                            title="Login bypass candidate; identity not verified",
                             url=form["action"],
                             method=form["method"],
                             payload=json.dumps(payload),
                             status=str(result.status),
-                            evidence=f"Location={location or '-'}",
+                            evidence=f"Location={location or '-'}; generic login signal only. No protected resource or identity validated.",
                             source=self.name,
                             confidence="medium",
                         )
