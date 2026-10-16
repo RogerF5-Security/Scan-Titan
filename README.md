@@ -62,6 +62,7 @@ El arranque omite los conteos de wordlists y el detalle de red, politica y ZAP. 
 - Integracion de Nmap, Nuclei, OWASP ZAP, WhatWeb, wafw00f, ffuf y subfinder cuando estan instalados.
 - Modulos de auditoria HTTP, TLS, autenticacion, autorizacion e inyecciones.
 - Telemetria aislada de CPU y RAM para Scan Titan y todos sus procesos hijos.
+- Monitor grafico adaptable con tarjetas, iconos y graficas en tiempo real de actividad HTTP interna y CPU/RAM; [uso y alcance de las metricas](docs/README.md#monitor).
 - Matriz Excel y lista raw de rutas HTTP `200/403` organizada por objetivo.
 - Deduplicacion de hallazgos, comandos de validacion manual y evidencias de navegador.
 - Dashboard diario e informe formal HTML con portada y detalle de hallazgos.

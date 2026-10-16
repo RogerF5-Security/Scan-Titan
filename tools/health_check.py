@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 
-REQUIRED_IMPORTS = ("aiohttp", "yaml", "openpyxl", "pandas", "bs4", "PIL", "psutil")
+REQUIRED_IMPORTS = ("aiohttp", "yaml", "openpyxl", "pandas", "bs4", "PIL", "psutil", "customtkinter")
 OPTIONAL_IMPORTS = ("playwright", "win32gui", "impacket")
 EXTERNAL_TOOLS = ("nmap", "nuclei", "ffuf", "whatweb", "subfinder", "wafw00f")
 ZAP_WINDOWS_CANDIDATES = (
@@ -38,6 +38,9 @@ def check_paths(root: Path) -> bool:
         root / "docs" / "web" / "index.html",
         root / "src" / "scan_titan" / "Main.py",
         root / "src" / "scan_titan" / "resource_monitor.py",
+        root / "src" / "scan_titan" / "ScanTitan_Monitor.py",
+        root / "src" / "scan_titan" / "monitor_ui.py",
+        root / "src" / "scan_titan" / "monitor_model.py",
         root / "src" / "scan_titan" / "session_manager.py",
         root / "src" / "scan_titan" / "ssh_audit.py",
         root / "src" / "scan_titan" / "modules" / "role_audit.py",

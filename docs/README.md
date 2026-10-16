@@ -89,7 +89,17 @@ Para monitorear otra carpeta copiada:
 python .\main.py --monitor --path C:\Ruta\A\OtroEscaneo
 ```
 
+En las copias antiguas que guardan `ScanTitan_Monitor.py` junto a `Main.py`, ejecuta `python ScanTitan_Monitor.py`. El monitor reconoce ambas estructuras y usa la carpeta de su propia copia.
+
+![Monitor adaptable: vista de prueba con datos simulados](../assets/scan-titan-monitor-preview.png)
+
 El monitor detecta la telemetria en `audit_reports/` o `reports/` y respeta las rutas de entorno del escaneo. La GUI muestra CPU, RAM RSS, cantidad de procesos y detalle por PID para el arbol exclusivo de Scan Titan, incluidos hijos como Nmap, Nuclei y ZAP. La CLI emite la misma muestra cada diez segundos. No se mezcla consumo global del sistema. Si pasan mas de 60 segundos sin actualizacion, muestra `SIN ACTUALIZAR`; un porcentaje antiguo no confirma que el proceso siga avanzando.
+
+La interfaz usa CustomTkinter e incluye tarjetas de hallazgos unicos, actividad HTTP interna, objetivos completados y duracion; barras de progreso global y del modulo; graficas de ritmo HTTP y CPU/RAM; y distribucion de severidades. Los paneles se redistribuyen al redimensionar la ventana, la navegacion lateral se oculta cuando falta espacio y el contenido conserva desplazamiento vertical. Las tablas tienen desplazamiento horizontal, conservan seleccion y posicion al actualizarse, y permiten consultar una fila con doble clic o Enter.
+
+La lectura se actualiza cada 1,5 segundos; las graficas guardan hasta 120 muestras distintas recibidas desde que se abrio el monitor. El ritmo HTTP necesita dos muestras del mismo objetivo/modulo y representa respuestas del cliente HTTP interno: no incluye las solicitudes de Nmap, Nuclei o ZAP. Cambiar de carpeta o de ejecucion reinicia el historial; cambios de modulo, reinicios de contadores y pausas largas separan el calculo de ritmo. CPU puede superar 100% al sumar varios nucleos. Los conteos por severidad se presentan tal como los entrega el motor y pueden tener un alcance diferente del contador de hallazgos unicos. Sin runtime se muestran reportes anteriores, sin atribuirles porcentaje de avance en vivo.
+
+Dependencias de la GUI: `customtkinter`, `Pillow` y Tkinter (incluido en la instalacion habitual de Python para Windows); se incluyen en `config/requirements.txt` cuando corresponde. Prueba de lectura e historial sin abrir ventanas: `python main.py --monitor --self-test`.
 
 LFI, XSS, SSRF y fuzzing de rutas usan un grupo de hasta 20 trabajadores. Cada prueba tiene timeout propio; una prueba bloqueada se cancela y queda en `timeout_skips` sin detener las restantes. Los contadores avanzan al terminar cada intento, y cada 15 segundos se informa de peticiones HTTP terminadas, activas y en espera. En zero-touch, LFI prioriza parametros de archivo/ruta observados y usa una muestra corta de alta senal cuando no existen. XSS ejecuta primero marcadores inocuos de reflexion y envia payloads activos solo a entradas que realmente reflejan contenido. LFI y XSS tienen un presupuesto maximo de 1,200 pruebas y un limite de 10 minutos por modulo; normalmente terminan antes por descarte adaptativo. `F` evita consumir toda la cola pendiente antes de finalizar.
 

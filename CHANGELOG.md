@@ -4,6 +4,14 @@ Este archivo registra los cambios funcionales verificables de cada version.
 
 Las versiones `21.3.2` y `21.3.3` documentan iteraciones locales verificadas que se consolidaron en `22.0.0`; no se publicaron como tags independientes.
 
+## Actualizaciones del monitor - 2026-10-16
+
+- Monitor modernizado con CustomTkinter, iconos vectoriales, tarjetas y distribucion adaptable con desplazamiento.
+- Graficas en tiempo real de actividad HTTP interna y CPU/RAM del arbol de Scan Titan; distribucion de severidades.
+- Historial acotado por ejecucion, deduplicacion de muestras y reinicio del calculo de ritmo al cambiar de contexto; indicadores de telemetria antigua y reportes anteriores.
+- Tablas con seleccion y desplazamiento persistentes, detalle por fila y navegacion lateral adaptativa.
+- Deteccion de carpeta compatible con paquetes actuales y copias antiguas con archivos en la raiz.
+
 ## [22.3.0] - 2026-10-02
 
 - FTP/SMB: evidencia de acceso anonimo a directorios/recursos, servidor/SO y autenticacion.

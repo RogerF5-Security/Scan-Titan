@@ -24,6 +24,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import customtkinter as ctk
+
+from monitor_model import monitor_base_dir
+from monitor_ui import DashboardUI
+
 try:
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
@@ -35,7 +40,7 @@ APP_TITLE = "Scan Titan Monitor"
 RUNTIME_NAME = "scan_titan_runtime.json"
 REFRESH_MS = 1500
 SEVERITIES = ("Critical", "High", "Medium", "Low", "Info")
-DEFAULT_BASE_DIR = Path(os.environ.get("SCAN_TITAN_BASE_DIR", Path(__file__).resolve().parents[2])).resolve()
+DEFAULT_BASE_DIR = Path(os.environ.get("SCAN_TITAN_BASE_DIR", monitor_base_dir(Path(__file__)))).resolve()
 
 
 def resolve_reports_dir(base_dir: Path) -> Path:
@@ -172,7 +177,7 @@ def open_path(path: Path) -> None:
         messagebox.showerror(APP_TITLE, f"No se pudo abrir:\n{path}\n\n{exc}")
 
 
-class MonitorApp(tk.Tk):
+class MonitorApp(DashboardUI, ctk.CTk):
     def __init__(self, base_dir: Path) -> None:
         super().__init__()
         self.base_dir = base_dir.resolve()
@@ -180,215 +185,23 @@ class MonitorApp(tk.Tk):
         self.runtime_file = resolve_runtime_file(self.base_dir)
         self._refresh_job: str | None = None
         self.title(APP_TITLE)
-        self.geometry("1240x820")
-        self.minsize(1080, 680)
-        self.configure(bg="#101820")
+        # Tk reports logical screen dimensions here; CTk scales geometry itself.
+        width = min(1480, max(560, self.winfo_screenwidth() - 40))
+        height = min(940, max(560, self.winfo_screenheight() - 60))
+        self.geometry(f"{width}x{height}")
+        self.minsize(560, 520)
         self._setup_style()
         self._build_ui()
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
         self.refresh()
 
-    def _setup_style(self) -> None:
-        self.style = ttk.Style(self)
-        try:
-            self.style.theme_use("clam")
-        except Exception:
-            pass
-        self.style.configure("TFrame", background="#101820")
-        self.style.configure("Panel.TFrame", background="#16232e", relief="flat")
-        self.style.configure("TLabel", background="#101820", foreground="#e7eef7")
-        self.style.configure("Panel.TLabel", background="#16232e", foreground="#e7eef7")
-        self.style.configure("Muted.TLabel", background="#101820", foreground="#9fb0c2")
-        self.style.configure("Title.TLabel", background="#101820", foreground="#ffffff", font=("Segoe UI", 20, "bold"))
-        self.style.configure("Metric.TLabel", background="#16232e", foreground="#ffffff", font=("Segoe UI", 18, "bold"))
-        self.style.configure("Accent.Horizontal.TProgressbar", troughcolor="#22313f", background="#00b7ff")
-        self.style.configure("Danger.Horizontal.TProgressbar", troughcolor="#22313f", background="#ff4d5e")
-        self.style.configure("Treeview", background="#0f1720", foreground="#e7eef7", fieldbackground="#0f1720", rowheight=26)
-        self.style.configure("Treeview.Heading", background="#263746", foreground="#ffffff", font=("Segoe UI", 9, "bold"))
-        self.style.map("Treeview", background=[("selected", "#275f7c")])
-        self.style.configure("TNotebook", background="#101820", borderwidth=0)
-        self.style.configure("TNotebook.Tab", background="#263746", foreground="#ffffff", padding=(14, 8))
-        self.style.map("TNotebook.Tab", background=[("selected", "#00a3d7")])
-
-    def _build_ui(self) -> None:
-        container = ttk.Frame(self, padding=16)
-        container.pack(fill="both", expand=True)
-
-        header = ttk.Frame(container)
-        header.pack(fill="x")
-        ttk.Label(header, text="SCAN TITAN :: LIVE OPERATIONS MONITOR", style="Title.TLabel").pack(side="left")
-        self.status_label = tk.Label(
-            header,
-            text="IDLE",
-            bg="#43505c",
-            fg="#ffffff",
-            font=("Segoe UI", 11, "bold"),
-            padx=14,
-            pady=6,
-        )
-        self.status_label.pack(side="right")
-
-        path_row = ttk.Frame(container)
-        path_row.pack(fill="x", pady=(10, 12))
-        self.path_var = tk.StringVar(value=str(self.base_dir))
-        ttk.Label(path_row, textvariable=self.path_var, style="Muted.TLabel").pack(side="left", fill="x", expand=True)
-        self._button(path_row, "Refresh", self.refresh).pack(side="right", padx=(8, 0))
-        self._button(path_row, "Cambiar carpeta", self.choose_folder).pack(side="right", padx=(8, 0))
-
-        progress = ttk.Frame(container)
-        progress.pack(fill="x", pady=(0, 12))
-        ttk.Label(progress, text="Progreso global").grid(row=0, column=0, sticky="w")
-        self.global_bar = ttk.Progressbar(progress, style="Accent.Horizontal.TProgressbar", maximum=100)
-        self.global_bar.grid(row=1, column=0, sticky="ew", padx=(0, 12))
-        self.global_text = ttk.Label(progress, text="0.00%", style="Muted.TLabel")
-        self.global_text.grid(row=1, column=1, sticky="e")
-        ttk.Label(progress, text="Modulo actual").grid(row=2, column=0, sticky="w", pady=(8, 0))
-        self.module_bar = ttk.Progressbar(progress, style="Danger.Horizontal.TProgressbar", maximum=100)
-        self.module_bar.grid(row=3, column=0, sticky="ew", padx=(0, 12))
-        self.module_text = ttk.Label(progress, text="0.00%", style="Muted.TLabel")
-        self.module_text.grid(row=3, column=1, sticky="e")
-        progress.columnconfigure(0, weight=1)
-
-        cards = ttk.Frame(container)
-        cards.pack(fill="x", pady=(0, 12))
-        self.metric_vars = {
-            "target": tk.StringVar(value="-"),
-            "phase": tk.StringVar(value="-"),
-            "module": tk.StringVar(value="-"),
-            "tests": tk.StringVar(value="-"),
-            "findings": tk.StringVar(value="-"),
-            "elapsed": tk.StringVar(value="-"),
-            "cpu": tk.StringVar(value="-"),
-            "ram": tk.StringVar(value="-"),
-            "processes": tk.StringVar(value="-"),
-        }
-        self._metric_card(cards, "Target", self.metric_vars["target"]).grid(row=0, column=0, sticky="ew", padx=(0, 8))
-        self._metric_card(cards, "Fase", self.metric_vars["phase"]).grid(row=0, column=1, sticky="ew", padx=8)
-        self._metric_card(cards, "Modulo", self.metric_vars["module"]).grid(row=0, column=2, sticky="ew", padx=8)
-        self._metric_card(cards, "Pruebas / Hits", self.metric_vars["tests"]).grid(row=0, column=3, sticky="ew", padx=8)
-        self._metric_card(cards, "Vulns unicas / ocurrencias", self.metric_vars["findings"]).grid(row=0, column=4, sticky="ew", padx=8)
-        self._metric_card(cards, "Tiempo", self.metric_vars["elapsed"]).grid(row=0, column=5, sticky="ew", padx=(8, 0))
-        self._metric_card(cards, "CPU proceso + hijos", self.metric_vars["cpu"]).grid(row=1, column=0, columnspan=2, sticky="ew", padx=(0, 8), pady=(8, 0))
-        self._metric_card(cards, "RAM RSS proceso + hijos", self.metric_vars["ram"]).grid(row=1, column=2, columnspan=2, sticky="ew", padx=8, pady=(8, 0))
-        self._metric_card(cards, "Arbol de procesos", self.metric_vars["processes"]).grid(row=1, column=4, columnspan=2, sticky="ew", padx=(8, 0), pady=(8, 0))
-        for index in range(6):
-            cards.columnconfigure(index, weight=1, uniform="cards")
-
-        actions = ttk.Frame(container)
-        actions.pack(fill="x", pady=(0, 12))
-        self._button(actions, "Abrir reports", lambda: open_path(self.reports_dir)).pack(side="left", padx=(0, 8))
-        self._button(actions, "Abrir Dashboard HTML", self.open_dashboard).pack(side="left", padx=(0, 8))
-        self._button(actions, "Abrir Recon Matrix", lambda: open_path(self.reports_dir / "Recon_Matrix.xlsx")).pack(side="left", padx=(0, 8))
-        self._button(actions, "Abrir Runtime JSON", lambda: open_path(self.runtime_file)).pack(side="left", padx=(0, 8))
-
-        self.notebook = ttk.Notebook(container)
-        self.notebook.pack(fill="both", expand=True)
-
-        self.modules_tree = self._tree(
-            "Fases / Modulos",
-            ("target", "module", "status", "tested", "hits", "findings", "duration", "error"),
-            ("Target", "Modulo", "Estado", "Tested", "Hits", "Findings", "Tiempo", "Error"),
-        )
-        self.external_tree = self._tree(
-            "Herramientas externas",
-            ("tool", "profile", "status", "rc", "findings", "duration", "timeout", "error"),
-            ("Tool", "Perfil", "Estado", "RC", "Parsed", "Tiempo", "Timeout", "Error"),
-        )
-        self.findings_tree = self._tree(
-            "Hallazgos recientes",
-            ("time", "severity", "target", "title", "source", "fingerprint"),
-            ("Hora", "Sev", "Target", "Titulo", "Source", "Fingerprint"),
-        )
-        self.events_tree = self._tree(
-            "Eventos",
-            ("time", "level", "message"),
-            ("Hora", "Nivel", "Mensaje"),
-        )
-        self.resources_tree = self._tree(
-            "Recursos por proceso",
-            ("pid", "name", "cpu", "ram"),
-            ("PID", "Proceso", "CPU %", "RAM MB"),
-        )
-        for tree in (self.modules_tree, self.external_tree, self.findings_tree, self.events_tree, self.resources_tree):
-            self._configure_columns(tree)
-
-        self.footer_var = tk.StringVar(value="Esperando telemetria...")
-        ttk.Label(container, textvariable=self.footer_var, style="Muted.TLabel").pack(fill="x", pady=(10, 0))
-
-    def _button(self, parent: tk.Widget, text: str, command: Any) -> tk.Button:
-        return tk.Button(
-            parent,
-            text=text,
-            command=command,
-            bg="#00a3d7",
-            fg="#ffffff",
-            activebackground="#02b8f3",
-            activeforeground="#ffffff",
-            relief="flat",
-            padx=12,
-            pady=6,
-            font=("Segoe UI", 9, "bold"),
-        )
-
-    def _metric_card(self, parent: tk.Widget, label: str, variable: tk.StringVar) -> ttk.Frame:
-        frame = ttk.Frame(parent, style="Panel.TFrame", padding=12)
-        ttk.Label(frame, text=label, style="Panel.TLabel").pack(anchor="w")
-        ttk.Label(frame, textvariable=variable, style="Metric.TLabel", wraplength=180).pack(anchor="w", pady=(6, 0))
-        return frame
-
-    def _tree(self, tab_name: str, columns: tuple[str, ...], headings: tuple[str, ...]) -> ttk.Treeview:
-        frame = ttk.Frame(self.notebook, padding=8)
-        self.notebook.add(frame, text=tab_name)
-        tree = ttk.Treeview(frame, columns=columns, show="headings")
-        scroll_y = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
-        scroll_x = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview)
-        tree.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
-        tree.grid(row=0, column=0, sticky="nsew")
-        scroll_y.grid(row=0, column=1, sticky="ns")
-        scroll_x.grid(row=1, column=0, sticky="ew")
-        frame.rowconfigure(0, weight=1)
-        frame.columnconfigure(0, weight=1)
-        for column, heading in zip(columns, headings):
-            tree.heading(column, text=heading)
-        tree.tag_configure("Critical", foreground="#ff657a")
-        tree.tag_configure("High", foreground="#ff9f43")
-        tree.tag_configure("Medium", foreground="#feca57")
-        tree.tag_configure("Low", foreground="#48dbfb")
-        tree.tag_configure("Info", foreground="#c8d6e5")
-        tree.tag_configure("failed", foreground="#ff657a")
-        tree.tag_configure("timeout", foreground="#ff9f43")
-        tree.tag_configure("degraded", foreground="#feca57")
-        tree.tag_configure("running", foreground="#00d2d3")
-        tree.tag_configure("finished", foreground="#1dd1a1")
-        return tree
-
-    def _configure_columns(self, tree: ttk.Treeview) -> None:
-        widths = {
-            "target": 180,
-            "module": 170,
-            "status": 95,
-            "tested": 80,
-            "hits": 70,
-            "findings": 80,
-            "duration": 90,
-            "error": 360,
-            "tool": 110,
-            "profile": 210,
-            "rc": 70,
-            "timeout": 80,
-            "time": 150,
-            "severity": 80,
-            "title": 420,
-            "source": 130,
-            "fingerprint": 145,
-            "level": 80,
-            "message": 760,
-            "pid": 90,
-            "name": 280,
-            "cpu": 100,
-            "ram": 120,
-        }
-        for column in tree["columns"]:
-            tree.column(column, width=widths.get(column, 120), minwidth=60, stretch=True)
+    def destroy(self) -> None:
+        for name in ("_refresh_job", "_layout_job"):
+            job = getattr(self, name, None)
+            if job:
+                self.after_cancel(job)
+                setattr(self, name, None)
+        super().destroy()
 
     def choose_folder(self) -> None:
         chosen = filedialog.askdirectory(initialdir=str(self.base_dir), title="Selecciona carpeta de Scan Titan")
@@ -398,6 +211,7 @@ class MonitorApp(tk.Tk):
         self.reports_dir = resolve_reports_dir(self.base_dir)
         self.runtime_file = resolve_runtime_file(self.base_dir)
         self.path_var.set(str(self.base_dir))
+        self.history.clear()
         self.refresh()
 
     def open_dashboard(self) -> None:
@@ -447,9 +261,9 @@ class MonitorApp(tk.Tk):
         if external_rows:
             event_rows.append(("", "INFO", "Fallback cargado desde external_tools_observability.jsonl"))
 
-        self._set_status("FALLBACK", "#f39c12" if latest_report or external_rows or state else "#43505c")
-        self.global_bar["value"] = 100 if latest_report else 0
-        self.module_bar["value"] = 0
+        self._set_status("REPORTES" if latest_report or external_rows or state else "ESPERANDO", "#f39c12" if latest_report or external_rows or state else "#43505c")
+        self.global_bar.set(0)
+        self.module_bar.set(0)
         self.global_text.configure(text="100.00%" if latest_report else "0.00%")
         self.module_text.configure(text="0.00%")
         self.metric_vars["target"].set(safe_text(report_data.get("target") or "-", 90))
@@ -488,14 +302,21 @@ class MonitorApp(tk.Tk):
         else:
             self.footer_var.set(f"Esperando {self.runtime_file}")
 
+        self._update_dashboard({
+            "current_target": report_data.get("target"),
+            "current_phase": "Reportes anteriores",
+            "findings": counts,
+            "finding_unique": report_data.get("total_findings"),
+        }, fallback=True)
+
     def _render_runtime(self, data: dict[str, Any]) -> None:
         status = safe_text(data.get("status") or "unknown").upper()
         stale = runtime_is_stale(data)
         self._set_status("SIN ACTUALIZAR" if stale else status, "#f39c12" if stale else self._status_color(status.lower()))
         global_percent = self._float_value(data.get("global_percent"))
         module_percent = self._float_value(data.get("module_percent"))
-        self.global_bar["value"] = global_percent
-        self.module_bar["value"] = module_percent
+        self.global_bar.set(global_percent / 100)
+        self.module_bar.set(module_percent / 100)
         self.global_text.configure(text=f"{global_percent:.2f}%")
         self.module_text.configure(text=f"{module_percent:.2f}%")
         if stale:
@@ -520,7 +341,7 @@ class MonitorApp(tk.Tk):
         self.metric_vars["findings"].set(f"{counts_text}\nU:{unique_count} | O:{occurrence_count}")
         started = parse_timestamp(data.get("started_at"))
         elapsed = data.get("elapsed_seconds")
-        if started and data.get("status") in {"running", "paused", "finishing"}:
+        if started and not stale and data.get("status") in {"running", "paused", "finishing"}:
             elapsed = (datetime.now() - started).total_seconds()
         self.metric_vars["elapsed"].set(format_seconds(elapsed))
         resources = data.get("resources") if isinstance(data.get("resources"), dict) else {}
@@ -628,9 +449,16 @@ class MonitorApp(tk.Tk):
         elif last_warning:
             footer += f" | Ultimo aviso: {last_warning}"
         self.footer_var.set(footer)
+        self._update_dashboard(data, stale=stale)
 
     def _set_status(self, text: str, color: str) -> None:
-        self.status_label.configure(text=text, bg=color)
+        labels = {
+            "RUNNING": "EN VIVO", "FINISHING": "FINALIZANDO", "PAUSED": "PAUSADO",
+            "FINISHED": "FINALIZADO", "FINISHED_EARLY": "FINALIZADO PARCIAL",
+            "NO_TARGETS": "SIN OBJETIVOS", "FAILED": "ERROR", "INTERRUPTED": "INTERRUMPIDO",
+            "CANCELLED": "CANCELADO", "UNKNOWN": "SIN ESTADO",
+        }
+        self.status_label.configure(text=labels.get(text, text), text_color=color, fg_color="#1b283d")
 
     def _status_color(self, status: str) -> str:
         if status in {"running", "scan", "module", "external"}:
@@ -644,17 +472,25 @@ class MonitorApp(tk.Tk):
         return "#43505c"
 
     def _replace_rows(self, tree: ttk.Treeview, rows: list[tuple[Any, ...]]) -> None:
+        normalized = tuple(tuple("" if item is None else item for item in row) for row in rows)
+        if self._rows_cache.get(tree) == normalized:
+            return
+        self._rows_cache[tree] = normalized
+        selected = [tree.item(iid, "values") for iid in tree.selection()]
+        x_position, y_position = tree.xview()[0], tree.yview()[0]
         tree.delete(*tree.get_children())
-        for row in rows:
-            tags: list[str] = []
-            values = tuple("" if item is None else item for item in row)
+        for index, values in enumerate(normalized):
+            tags = ["alternate"] if index % 2 else []
             for value in values:
-                text = str(value)
-                if text in SEVERITIES:
-                    tags.append(text)
-                if text in {"running", "finished", "degraded", "failed", "timeout"}:
-                    tags.append(text)
-            tree.insert("", "end", values=values, tags=tuple(tags))
+                label = str(value)
+                if label in SEVERITIES or label in {"running", "finished", "degraded", "failed", "timeout"}:
+                    tags.append(label)
+            iid = tree.insert("", "end", values=values, tags=tuple(tags))
+            if tuple(str(v) for v in values) in selected:
+                tree.selection_set(iid)
+                tree.focus(iid)
+        tree.xview_moveto(x_position)
+        tree.yview_moveto(y_position)
 
     def _latest_target_report(self) -> Path | None:
         if not self.reports_dir.exists():
@@ -778,6 +614,8 @@ class MonitorApp(tk.Tk):
 
 
 def run_self_test() -> int:
+    from monitor_model import TelemetryHistory
+
     sample = {
         "status": "running",
         "global_percent": 51.5,
@@ -794,6 +632,17 @@ def run_self_test() -> int:
     assert format_seconds(3661) == "1h 01m 01s"
     assert safe_text("a\nb") == "a b"
     assert sample["resources"]["process_count"] == 3
+    sample.update(pid=1, started_at="2026-10-16T12:00:00", updated_at="2026-10-16T12:00:00",
+                  current_target="example.test", current_module="headers", http_activity={"completed": 100})
+    history = TelemetryHistory()
+    history.ingest(sample, "self-test")
+    history.ingest(sample, "self-test")
+    assert len(history.series["cpu"]) == 1
+    sample.update(updated_at="2026-10-16T12:00:10", http_activity={"completed": 150})
+    history.ingest(sample, "self-test")
+    assert history.rate == 5.0
+    history.ingest(sample, "self-test", stale=True)
+    assert history.rate is None
     print("SCAN_TITAN_MONITOR_SELFTEST_OK")
     return 0
 
