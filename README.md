@@ -4,6 +4,8 @@
 
 Motor comunitario de auditoria automatizada en Python: reconocimiento, pruebas web, orquestacion de herramientas externas y reportes de vulnerabilidades para profesionales y equipos de seguridad de cualquier region.
 
+> **Reconocimiento, auditoría y evidencia en un solo flujo.**
+
 **Version del motor:** 22.3.0. **Estado:** repositorio publico. [Web de Scan Titan](https://rogerf5-security.github.io/Scan-Titan/).
 
 **Upgrade Core:** [arquitectura y configuracion](docs/CORE_UPGRADE.md),
@@ -84,6 +86,14 @@ Los resultados requieren valorar su evidencia y confianza. Una prueba automatiza
 | `python main.py --help` | Opciones disponibles |
 
 En Windows: `P` pausa, `R` reanuda, `F` finaliza y genera los reportes con lo encontrado; `Ctrl+C` interrumpe. Cada modulo, prueba HTTP y perfil externo tiene un timeout estricto. Un timeout se registra como salto, cancela los workers pendientes del componente y permite continuar el pipeline.
+
+## Monitor en tiempo real
+
+El dashboard adapta sus paneles al tamaño de la ventana y reúne el progreso del escaneo, los hallazgos, la actividad HTTP y el consumo de CPU/RAM.
+
+![Scan Titan Monitor: dashboard adaptable con métricas y gráficas en tiempo real](assets/scan-titan-monitor-preview.png)
+
+*Vista de prueba con datos simulados.* Abre el monitor con `python main.py --monitor`. [Uso y alcance de las métricas](docs/README.md#monitor).
 
 ## Reportes
 
