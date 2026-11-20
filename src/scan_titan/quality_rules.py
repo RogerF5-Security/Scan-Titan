@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from finding_triage import injection_family
 
 
 def finding_quality_exclusion(finding: Any) -> str:
@@ -18,7 +19,13 @@ def finding_quality_exclusion(finding: Any) -> str:
     param = value("param").strip().lower()
     confidence = value("confidence").strip().lower()
     evidence = " ".join([value("evidence"), value("details")]).lower()
+    if title in {"front-end storage/cookie access pattern", "dom xss sink indicators detected"} or title.startswith("front-end token/secret exposed:"):
+        return "static_client_side_indicator_requires_validation"
     status_text = value("status", "http").strip()
+    validation = finding.get("validation", {}) if isinstance(finding, dict) else getattr(finding, "validation", {})
+    if injection_family(finding) and (not isinstance(validation, dict) or validation.get("state") != "CONFIRMED"
+                                      or validation.get('version') != 'differential-v1'):
+        return "injection_requires_independent_differential_validation"
     try:
         status = int(status_text)
     except (TypeError, ValueError):

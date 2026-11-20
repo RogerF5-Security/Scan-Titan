@@ -60,7 +60,13 @@ class PublicTemplateTests(unittest.TestCase):
                 self.assertTrue(args.full)
 
     def test_optional_private_technical_exporter_is_absent(self) -> None:
+        # The private workspace legitimately carries the exporter and the private
+        # suite that imports it (test_zero_touch_core.py, never published). The
+        # public tree ships neither, so there the strict check always runs.
+        if (ROOT / "tests" / "test_zero_touch_core.py").exists():
+            self.skipTest("workspace privado: el exportador tecnico privado es esperado aqui")
         self.assertIsNone(importlib.util.find_spec("technical_detail_exporter"))
+        self.assertFalse((ENGINE / "technical_detail_exporter.py").exists())
 
     def test_whatweb_json_parser_extracts_structured_technologies(self) -> None:
         from recon_manager import parse_whatweb_json
@@ -125,13 +131,13 @@ class PublicTemplateTests(unittest.TestCase):
         self.assertTrue(config.policy.browser_evidence)
         self.assertFalse(config.policy.console_screenshots)
         self.assertEqual(config.nmap_timeout, 1800)
-        self.assertEqual(config.nuclei_timeout, 1500)
+        self.assertEqual(config.nuclei_timeout, 0)
         self.assertEqual(config.zap_timeout, 1800)
         self.assertEqual(config.zap_spider_timeout, 180)
         self.assertEqual(config.zap_passive_timeout, 120)
         self.assertEqual(config.zap_active_timeout, 900)
         self.assertEqual(config.external_profile_timeout("nmap", "network_vulnerability_scan", 1), 1800)
-        self.assertEqual(config.external_profile_timeout("nuclei", "vulnerability_scan", 1), 600)
+        self.assertEqual(config.external_profile_timeout("nuclei", "vulnerability_scan", 1), 0)
         expected_external_dir = Path(config.config_data["reporting"]["external_reports_dir"])
         if not expected_external_dir.is_absolute():
             expected_external_dir = ROOT / expected_external_dir

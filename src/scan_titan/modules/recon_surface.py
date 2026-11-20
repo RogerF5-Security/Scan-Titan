@@ -8,6 +8,7 @@ import urllib.parse
 from typing import Any
 
 from bs4 import BeautifulSoup
+from .javascript_recon import javascript_recon
 
 from .common import (
     Finding,
@@ -80,6 +81,7 @@ class ReconSurfaceModule(VulnerabilityModule):
         ctx.recon["login_forms"] = self._extract_login_forms(base.final_url, soup)
         ctx.recon["endpoints"] = self._extract_endpoints(base.final_url, soup, ctx.target.host)
         ctx.recon["websockets"] = self._extract_websockets(base.text)
+        await javascript_recon(ctx, base)
 
         subdomains = await self._subdomains(ctx)
         ctx.recon["subdomains"] = subdomains
@@ -102,7 +104,7 @@ class ReconSurfaceModule(VulnerabilityModule):
         async def probe(path: str) -> None:
             nonlocal tested
             url = urllib.parse.urljoin(ctx.target.url, path)
-            result = await ctx.http.request("GET", url, allow_redirects=False)
+            result = await ctx.http.request_route(url)
             async with lock:
                 tested += 1
                 if tested == 1 or tested % 25 == 0:

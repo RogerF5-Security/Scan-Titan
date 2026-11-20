@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scan-titan"
+description = "Scan Titan authorized assessment engine and development workspace launcher"
+requires-python = ">=3.11"
+dynamic = ["version", "dependencies"]
+readme = "README.md"
+
+[project.scripts]
+scan-titan = "scan_titan.cli:main"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["scan_titan", "scan_titan.*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+scan_titan = ["nse/*.nse"]
+
+[tool.setuptools.dynamic]
+version = {file = ["VERSION"]}
+dependencies = {file = ["config/requirements.txt"]}

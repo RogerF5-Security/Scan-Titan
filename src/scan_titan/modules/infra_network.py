@@ -9,28 +9,6 @@ class InfraNetworkModule(VulnerabilityModule):
     name = "infra_network"
 
     COMMON_PORTS = [21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 1433, 1521, 3306, 3389, 5432, 6379, 8000, 8080, 8443, 9200, 27017]
-    VERSION_RISKS = {
-        "apache/2.2": "Apache 2.2 is end-of-life.",
-        "apache/2.0": "Apache 2.0 is obsolete.",
-        "php/5.": "PHP 5.x is end-of-life.",
-        "php/7.0": "PHP 7.0 is end-of-life.",
-        "php/7.1": "Old PHP 7.1 branch detected.",
-        "php/7.2": "Old PHP 7.2 branch detected.",
-        "php/7.3": "Old PHP 7.3 branch detected.",
-        "php/7.4": "Old PHP 7.4 branch detected.",
-        "openssl/1.0": "OpenSSL 1.0.x is end-of-life.",
-        "openssl/1.1.0": "Old OpenSSL branch detected.",
-        "nginx/1.10": "Old nginx branch detected.",
-        "nginx/1.12": "Old nginx branch detected.",
-        "nginx/1.14": "Old nginx branch detected.",
-        "nginx/1.16": "Old nginx branch detected.",
-        "iis/6.0": "IIS 6.0 is obsolete.",
-        "iis/7.0": "Old IIS branch detected.",
-        "openssh_7.": "Older OpenSSH branch detected.",
-        "tomcat/7": "Old Apache Tomcat branch detected.",
-        "tomcat/8.0": "Old Apache Tomcat branch detected.",
-        "jboss": "JBoss/WildFly exposure requires version validation.",
-    }
     WAF_HEADERS = {
         "cf-ray": "Cloudflare",
         "cf-cache-status": "Cloudflare",
@@ -115,21 +93,6 @@ class InfraNetworkModule(VulnerabilityModule):
                     confidence="high",
                 )
             )
-        banner = " ".join([server, powered]).lower()
-        for marker, evidence in self.VERSION_RISKS.items():
-            if marker in banner:
-                findings.append(
-                    Finding(
-                        target=ctx.target.display,
-                        category="Infra",
-                        severity="Medium",
-                        title=f"Potential vulnerable/obsolete version: {marker}",
-                        url=ctx.target.url,
-                        evidence=evidence,
-                        source=self.name,
-                        confidence="medium",
-                    )
-                )
         return findings
 
     async def _http_methods(self, ctx: ScanContext) -> list[Finding]:

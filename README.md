@@ -6,7 +6,7 @@ Motor comunitario de auditoria automatizada en Python: reconocimiento, pruebas w
 
 > **Reconocimiento, auditoría y evidencia en un solo flujo.**
 
-**Version del motor:** 22.3.0. **Estado:** repositorio publico. [Web de Scan Titan](https://rogerf5-security.github.io/Scan-Titan/).
+**Version del motor:** 22.5.0. **Estado:** repositorio publico. [Web de Scan Titan](https://rogerf5-security.github.io/Scan-Titan/).
 
 **Upgrade Core:** [arquitectura y configuracion](docs/CORE_UPGRADE.md),
 [cobertura de 55 actividades](docs/METODOLOGIA_55.md) e
@@ -60,8 +60,12 @@ El arranque omite los conteos de wordlists y el detalle de red, politica y ZAP. 
 
 ## Capacidades
 
+- [Catalogo local de versiones vulnerables y fin de soporte](docs/VERSION_INTELLIGENCE.md): correlacion de headers, JavaScript, WhatWeb/Wappy y servicios Nmap, con fuentes y rangos publicados. Actualizacion automatica semanal y uso offline de la ultima base disponible.
+- El Daily muestra por defecto los hallazgos vigentes del estado local, igual que la consola; el selector permite ver las observaciones por dia sin confundir ambas metricas.
+
 - Reconocimiento de tecnologias, puertos, rutas, APIs y aplicaciones SPA.
 - Integracion de Nmap, Nuclei, OWASP ZAP, WhatWeb, wafw00f, ffuf y subfinder cuando estan instalados.
+- Reconocimiento acotado con Katana y httpx de ProjectDiscovery; [configuracion y controles](docs/EXTERNAL_RECON.md).
 - Modulos de auditoria HTTP, TLS, autenticacion, autorizacion e inyecciones.
 - Telemetria aislada de CPU y RAM para Scan Titan y todos sus procesos hijos.
 - Monitor grafico adaptable con tarjetas, iconos y graficas en tiempo real de actividad HTTP interna y CPU/RAM; [uso y alcance de las metricas](docs/README.md#monitor).
@@ -85,7 +89,9 @@ Los resultados requieren valorar su evidencia y confianza. Una prueba automatiza
 | `python main.py --health-check` | Comprobar estructura, dependencias y herramientas |
 | `python main.py --help` | Opciones disponibles |
 
-En Windows: `P` pausa, `R` reanuda, `F` finaliza y genera los reportes con lo encontrado; `Ctrl+C` interrumpe. Cada modulo, prueba HTTP y perfil externo tiene un timeout estricto. Un timeout se registra como salto, cancela los workers pendientes del componente y permite continuar el pipeline.
+En Windows: `P` pausa, `R` reanuda, `F` finaliza y genera los reportes con lo encontrado; `Ctrl+C` interrumpe. Los modulos y peticiones HTTP mantienen limites estrictos. Nuclei no tiene limite total por defecto: mientras crece el contador de peticiones continua; si no hay progreso durante 300 segundos, se detiene y conserva la evidencia parcial. `--nuclei-timeout` permite fijar un limite total explicito.
+
+Por defecto se procesan hasta dos objetivos a la vez bajo un semaforo HTTP global de 20 solicitudes. Las herramientas externas se ejecutan de una en una para proteger recursos locales. El descubrimiento HTTP de rutas se reutiliza entre modulos; FFUF recibe entradas aun no probadas. El perfil base de Nmap ya incluye `http-slowloris-check` por las categorias `vuln,safe`, por lo que el perfil dedicado se omite salvo en `--full` o cuando el perfil base no termina correctamente. Nuclei prioriza hallazgos de vulnerabilidades y CVE antes del perfil conservador; este ultimo utiliza hasta cuatro URLs relevantes en modo normal y al menos doce en `--full`.
 
 ## Monitor en tiempo real
 
@@ -94,6 +100,10 @@ El dashboard adapta sus paneles al tamaño de la ventana y reúne el progreso de
 ![Scan Titan Monitor: dashboard adaptable con métricas y gráficas en tiempo real](assets/scan-titan-monitor-preview.png)
 
 *Vista de prueba con datos simulados.* Abre el monitor con `python main.py --monitor`. [Uso y alcance de las métricas](docs/README.md#monitor).
+
+## Validación de inyecciones y falsos positivos
+
+XSS, SQLi y traversal requieren validación diferencial independiente. Las alertas históricas sin prueba quedan en **Por validar**. El Daily incorpora inteligencia JavaScript y permite descartar/restaurar hallazgos. Ejecuta **Abrir_Daily.cmd** o `python main.py --daily-live` para guardar decisiones que el motor aplicará en futuros escaneos. [Criterios, recon, comandos y límites](docs/DAST_PRECISION.md).
 
 ## Reportes
 

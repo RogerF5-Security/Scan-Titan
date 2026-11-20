@@ -99,6 +99,43 @@ function Install-WingetPackage {
     }
 }
 
+function Test-ProjectDiscoveryHttpx {
+    param([string]$Binary)
+    if (-not $Binary -or -not (Test-Path -LiteralPath $Binary)) { return $false }
+    try {
+        $help = & $Binary -h 2>&1 | Out-String
+        return ($LASTEXITCODE -eq 0 -and $help.Contains('-tech-detect') -and $help.Contains('-status-code'))
+    } catch { return $false }
+}
+
+function Install-ProjectDiscoveryRecon {
+    if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
+        Write-Warn "Go no encontrado; instala Katana y httpx desde ProjectDiscovery para habilitar el recon adicional"
+        return
+    }
+    $goBin = (& go env GOBIN 2>$null | Out-String).Trim()
+    if (-not $goBin) {
+        $goPath = (& go env GOPATH 2>$null | Out-String).Trim()
+        $goBin = Join-Path $goPath 'bin'
+    }
+    $katanaBin = Join-Path $goBin 'katana.exe'
+    $httpxBin = Join-Path $goBin 'httpx.exe'
+    if (-not (Test-Path -LiteralPath $katanaBin)) {
+        Write-Step 'Instalando Katana de ProjectDiscovery'
+        & go install github.com/projectdiscovery/katana/cmd/katana@latest
+        if ($LASTEXITCODE -ne 0) { Write-Warn 'Instalacion de Katana fallida' }
+    }
+    if (-not (Test-ProjectDiscoveryHttpx $httpxBin)) {
+        Write-Step 'Instalando httpx de ProjectDiscovery'
+        & go install github.com/projectdiscovery/httpx/cmd/httpx@latest
+        if ($LASTEXITCODE -ne 0) { Write-Warn 'Instalacion de httpx fallida' }
+    }
+    if (Test-Path -LiteralPath $katanaBin) { Write-Ok "Katana disponible: $katanaBin" }
+    else { Write-Warn 'Katana no disponible tras instalacion' }
+    if (Test-ProjectDiscoveryHttpx $httpxBin) { Write-Ok "httpx oficial disponible: $httpxBin" }
+    else { Write-Warn 'httpx oficial no disponible tras instalacion' }
+}
+
 Write-Step "Scan Titan Community installer"
 Write-Step "Raiz del proyecto: $ProjectRoot"
 
@@ -117,6 +154,7 @@ try {
 }
 
 if (-not $SkipSystemTools) {
+    Install-ProjectDiscoveryRecon
     if (-not (Test-Command "nmap")) {
         Install-WingetPackage -PackageId "Insecure.Nmap" -Label "Nmap"
     }

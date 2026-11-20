@@ -13,8 +13,6 @@ TARGETS_FILE = PROJECT_ROOT / "targets" / "targets.txt"
 
 
 def configure_environment() -> None:
-    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    (PROJECT_ROOT / "targets").mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("SCAN_TITAN_BASE_DIR", str(PROJECT_ROOT))
     os.environ.setdefault("SCAN_TITAN_ENGINE_DIR", str(ENGINE_DIR))
     os.environ.setdefault("SCAN_TITAN_CONFIG_FILE", str(CONFIG_FILE))
@@ -33,7 +31,10 @@ def configure_environment() -> None:
 def engine_path_ready() -> None:
     if not (ENGINE_DIR / "Main.py").exists():
         raise RuntimeError(f"Scan Titan engine not found: {ENGINE_DIR}")
-    sys.path.insert(0, str(ENGINE_DIR))
+    engine_dir = str(ENGINE_DIR)
+    if engine_dir in sys.path:
+        sys.path.remove(engine_dir)
+    sys.path.insert(0, engine_dir)
 
 
 def run_monitor(argv: list[str]) -> int:
@@ -51,11 +52,8 @@ def run_dashboard() -> int:
 
 def run_health_check() -> int:
     health_check = PROJECT_ROOT / "tools" / "health_check.py"
-    namespace: dict[str, object] = {
-        "__name__": "__scan_titan_health_check__",
-        "__file__": str(health_check),
-    }
-    exec(health_check.read_text(encoding="utf-8"), namespace)
+    import runpy
+    namespace = runpy.run_path(str(health_check), run_name="__scan_titan_health_check__")
     return int(namespace["main"]())
 
 
@@ -67,6 +65,10 @@ def main(argv: list[str] | None = None) -> int:
         return run_monitor(args[1:])
     if args and args[0] == "--dashboard":
         return run_dashboard()
+    if args and args[0] == "--daily-live":
+        run_dashboard()
+        from daily_server import serve_daily
+        return serve_daily(Path(os.environ["SCAN_TITAN_DASHBOARD_FILE"]))
     if args and args[0] == "--health-check":
         return run_health_check()
 

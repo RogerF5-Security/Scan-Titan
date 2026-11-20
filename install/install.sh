@@ -9,6 +9,38 @@ step() { printf '[*] %s\n' "$1"; }
 ok() { printf '[+] %s\n' "$1"; }
 warn() { printf '[!] %s\n' "$1"; }
 
+install_projectdiscovery_recon() {
+  if ! have go; then
+    warn "Go no encontrado; Katana y httpx oficiales quedan como herramientas opcionales"
+    return
+  fi
+  local go_bin go_path
+  go_bin="$(go env GOBIN)"
+  if [ -z "$go_bin" ]; then
+    go_path="$(go env GOPATH)"
+    go_bin="$go_path/bin"
+  fi
+  if [ ! -x "$go_bin/katana" ]; then
+    step "Instalando Katana de ProjectDiscovery"
+    go install github.com/projectdiscovery/katana/cmd/katana@latest || warn "Instalacion de Katana fallida"
+  fi
+  local httpx_help=""
+  if [ -x "$go_bin/httpx" ]; then
+    httpx_help="$("$go_bin/httpx" -h 2>&1 || true)"
+  fi
+  if [ ! -x "$go_bin/httpx" ] || [[ "$httpx_help" != *"-tech-detect"* ]]; then
+    step "Instalando httpx de ProjectDiscovery"
+    go install github.com/projectdiscovery/httpx/cmd/httpx@latest || warn "Instalacion de httpx fallida"
+  fi
+  [ -x "$go_bin/katana" ] && ok "Katana disponible: $go_bin/katana" || warn "Katana no disponible"
+  httpx_help="$("$go_bin/httpx" -h 2>&1 || true)"
+  if [ -x "$go_bin/httpx" ] && [[ "$httpx_help" == *"-tech-detect"* ]]; then
+    ok "httpx oficial disponible: $go_bin/httpx"
+  else
+    warn "httpx oficial no disponible"
+  fi
+}
+
 have() {
   command -v "$1" >/dev/null 2>&1
 }
@@ -26,6 +58,8 @@ install_apt() {
 
 step "Instalador Scan Titan Community"
 step "Raiz del proyecto: $PROJECT_ROOT"
+
+install_projectdiscovery_recon
 
 if ! have "$PYTHON_BIN"; then
   warn "$PYTHON_BIN no encontrado; probando python"

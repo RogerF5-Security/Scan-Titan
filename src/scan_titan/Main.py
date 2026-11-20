@@ -23,6 +23,7 @@ import ipaddress
 import json
 import os
 import re
+import secrets
 import signal
 import shutil
 import socket
@@ -69,13 +70,32 @@ from modules.common import (
     vulnerability_occurrence_key,
 )
 from evidence_manager import EvidenceManager
+from version_intelligence import VersionAuditor, VersionCatalog
+from external_recon import (
+    ExternalCommandQueue,
+    httpx_command,
+    is_projectdiscovery_httpx_help,
+    katana_command,
+    parse_katana,
+    parse_projectdiscovery_httpx,
+)
 from knowledge_manager import KnowledgeBase
 from owasp_2025 import normalize_owasp_2025
 from recon_manager import ReconMatrixManager
 from resource_monitor import ProcessTreeSampler
 from session_manager import SessionManager
+from finding_triage import is_discarded, load_decisions
+from modules.injection_validation import InjectionValidator
 from ssh_audit import NmapSSHAuditor
 from network_audit import NmapNetworkAuditor
+from service_exposure import (
+    EXTRA_SAFE_SCRIPTS,
+    UDP_PORTS,
+    UDP_SCRIPTS,
+    classify_script,
+    classify_service,
+    finding_kwargs,
+)
 
 try:
     from technical_detail_exporter import TechnicalDetailExporter, TechnicalDetailOptions
@@ -246,7 +266,7 @@ KNOWLEDGE_FILE = _path_from_env(
     "SCAN_TITAN_KNOWLEDGE_FILE",
     _first_existing(BASE_DIR / "data" / "scan_titan_knowledge.json", BASE_DIR / "scan_titan_knowledge.json"),
 )
-SCAN_VERSION = "TITAN v22.3.0 COMMUNITY ZERO-TOUCH"
+SCAN_VERSION = "TITAN v22.5.0 COMMUNITY ZERO-TOUCH"
 HEADER_SEPARATOR = "=" * 72
 REPORT_SEPARATOR = "─" * 72
 
@@ -293,13 +313,30 @@ class RuntimeTelemetry:
         self._module_started = 0.0
         self._target_started = 0.0
         self._target_names: list[str] = []
+        self._targets_by_name: dict[str, Target] = {}
         self._current_module_index = 0
         self._module_total_estimate = max(1, len(DEFAULT_MODULES))
         self._active_module_name = ""
+        # Parent module currently running per target; sub-module heartbeats
+        # (e.g. xss_reflected) are attributed to it instead of creating rows.
+        self._active_module_by_target: dict[str, str] = {}
+        self._module_started_by_target: dict[tuple[str, str], float] = {}
+        self._module_index_by_target: dict[str, int] = {}
+        self._active_targets: set[str] = set()
+        self._completed_targets: set[str] = set()
+        self._findings_by_target: dict[str, list[Finding]] = {}
+        self._active_external: tuple[str, str, str] | None = None
 
     def start(self, targets: list[Target], config: Any) -> None:
         self.started_monotonic = time.monotonic()
         self._target_names = [target.display for target in targets]
+        self._targets_by_name = {target.display: target for target in targets}
+        self._active_targets.clear()
+        self._completed_targets.clear()
+        self._findings_by_target.clear()
+        self._module_started_by_target.clear()
+        self._module_index_by_target.clear()
+        self._active_module_by_target.clear()
         self.state.update(
             {
                 "pid": os.getpid(),
@@ -340,6 +377,8 @@ class RuntimeTelemetry:
 
     def target_start(self, target: Target) -> None:
         self._target_started = time.monotonic()
+        self._active_targets.add(target.display)
+        self._module_index_by_target[target.display] = 0
         try:
             index = self._target_names.index(target.display) + 1
         except ValueError:
@@ -365,25 +404,48 @@ class RuntimeTelemetry:
         self.write()
 
     def target_end(self, target: Target, findings: list[Finding], duration: float) -> None:
-        completed = max(int(self.state.get("targets_completed") or 0), int(self.state.get("target_index") or 0))
+        self._active_targets.discard(target.display)
+        self._completed_targets.add(target.display)
+        completed = len(self._completed_targets)
         total_targets = max(1, int(self.state.get("target_total") or 1))
         self.state["targets_completed"] = completed
-        self.state["global_percent"] = round(min(100.0, (completed / total_targets) * 100.0), 2)
-        self._set_counts(findings)
+        self.state["global_percent"] = max(
+            float(self.state.get("global_percent") or 0),
+            round(min(100.0, (completed / total_targets) * 100.0), 2),
+        )
+        if self.state.get("current_target") == target.display and self._active_targets:
+            active = self._targets_by_name[sorted(self._active_targets)[0]]
+            self.state.update({"current_target": active.display,
+                               "current_target_url": active.url,
+                               "current_target_ip": active.ip})
+        self._findings_by_target[target.display] = findings
+        self._set_counts([item for group in self._findings_by_target.values() for item in group])
         self.event("TARGET", f"Objetivo finalizado {target.display} en {duration:.1f}s con {len(findings)} hallazgo(s)")
         self.write()
 
     def target_failed(self, target: Target, error: Any) -> None:
+        self._active_targets.discard(target.display)
+        self._completed_targets.add(target.display)
+        total = max(1, int(self.state.get("target_total") or 1))
+        self.state["targets_completed"] = len(self._completed_targets)
+        self.state["global_percent"] = max(
+            float(self.state.get("global_percent") or 0),
+            round(100 * len(self._completed_targets) / total, 2),
+        )
         self.state["last_error"] = clean_text(error, 600)
         self.event("ERROR", f"Objetivo fallido {target.display}: {error}")
         self.write()
 
     def module_start(self, target: Target, module_name: str, total: int, timeout: int) -> None:
         self._module_started = time.monotonic()
+        self._module_started_by_target[(target.display, module_name)] = self._module_started
+        self._module_index_by_target[target.display] = self._module_index_by_target.get(target.display, 0) + 1
         self._active_module_name = module_name
+        self._active_module_by_target[target.display] = module_name
         self._current_module_index += 1
         self.state.update(
             {
+                "current_target": target.display,
                 "current_phase": "module",
                 "current_module": module_name,
                 "current_detail": f"timeout={timeout}s",
@@ -404,19 +466,32 @@ class RuntimeTelemetry:
                 "tested": 0,
                 "hits": 0,
                 "findings": 0,
+                "total": int(total or 0),
                 "timeout_seconds": timeout,
             },
         )
         self.event("MODULE", f"{module_name} iniciado")
         self.write()
 
-    def heartbeat(self, module: str, detail: str, tested: int, hits: int) -> None:
-        total = int(self.state.get("module_total") or 0)
+    def heartbeat(self, module: str, detail: str, tested: int, hits: int,
+                  target: str | None = None) -> None:
+        target = target or str(self.state.get("current_target") or "")
+        record = next((item for item in self.state.get("modules", [])
+                       if item.get("module") == module and item.get("target") == target), {})
+        active_module = module
+        visible_detail = detail
+        parent = self._active_module_by_target.get(target, "")
+        if not record and parent and parent != module:
+            # Sub-module heartbeat: keep the parent row, its total and progress.
+            active_module = parent
+            visible_detail = f"{module}: {detail}"
+            record = next((item for item in self.state.get("modules", [])
+                           if item.get("module") == parent and item.get("target") == target), {})
+        total = int(record.get("total") or self.state.get("module_total") or 0)
         percent = min(100.0, (float(tested) / total) * 100.0) if total > 0 else 0.0
-        active_module = self._active_module_name or module
-        visible_detail = detail if module == active_module else f"{module}: {detail}"
         self.state.update(
             {
+                "current_target": target,
                 "current_module": active_module,
                 "current_detail": clean_text(visible_detail, 220),
                 "module_tested": tested,
@@ -427,18 +502,20 @@ class RuntimeTelemetry:
         self._upsert_module(
             active_module,
             {
-                "target": self.state.get("current_target", ""),
+                "target": target,
                 "module": active_module,
                 "detail": clean_text(f"{module}: {detail}", 220),
                 "tested": tested,
                 "hits": hits,
-                "duration_seconds": round(time.monotonic() - self._module_started, 1) if self._module_started else 0.0,
+                "duration_seconds": round(time.monotonic() - self._module_started_by_target.get((target, active_module), time.monotonic()), 1),
             },
         )
-        self._update_global_percent(percent / 100.0 if total else 0.0)
+        self._update_global_percent(percent / 100.0 if total else 0.0, target=target)
         self.write()
 
-    def module_end(self, module: str, findings: list[Finding], status: str = "finished", error: str = "") -> None:
+    def module_end(self, module: str, findings: list[Finding], status: str = "finished",
+                   error: str = "", target: str | None = None) -> None:
+        target = target or str(self.state.get("current_target") or "")
         if error and status in {"failed", "timeout"}:
             self.state["last_error"] = clean_text(error, 600)
         elif error:
@@ -447,9 +524,10 @@ class RuntimeTelemetry:
         self._upsert_module(
             module,
             {
+                "target": target,
                 "status": status,
                 "finished_at": now_text(),
-                "duration_seconds": round(time.monotonic() - self._module_started, 1) if self._module_started else 0.0,
+                "duration_seconds": round(time.monotonic() - self._module_started_by_target.pop((target, module), time.monotonic()), 1),
                 "findings": len(findings),
                 "error": clean_text(error, 500) if error else "",
             },
@@ -463,22 +541,31 @@ class RuntimeTelemetry:
         }
         self.event("MODULE", f"{module} {estados.get(status, status)} con {len(findings)} hallazgo(s)")
         self._active_module_name = ""
+        if self._active_module_by_target.get(target) == module:
+            self._active_module_by_target.pop(target, None)
         self.write()
 
-    def module_activity(self, module: str, detail: str, http: dict[str, Any]) -> None:
+    def module_activity(self, module: str, detail: str, http: dict[str, Any],
+                        target: str | None = None) -> None:
+        target = target or str(self.state.get("current_target") or "")
+        self.state["current_target"] = target
+        self.state["current_module"] = module
         self.state["current_detail"] = detail
         self.state["http_activity"] = http
         self._upsert_module(module, {
+            "target": target,
             "detail": detail,
             "http_activity": http,
-            "duration_seconds": round(time.monotonic() - self._module_started, 1),
+            "duration_seconds": round(time.monotonic() - self._module_started_by_target.get((target, module), time.monotonic()), 1),
         })
         self.write()
 
     def external_start(self, tool: str, profile: str, target: str, command: list[str] | None = None) -> None:
         key = f"{tool}:{profile}"
+        self._active_external = (tool, profile, target)
         self.state.update(
             {
+                "current_target": target,
                 "current_phase": "external",
                 "current_module": key,
                 "current_detail": target,
@@ -504,11 +591,11 @@ class RuntimeTelemetry:
         self.write()
 
     def external_heartbeat(self, process_id: int | None, elapsed: float) -> None:
-        key = str(self.state.get("current_module") or "")
-        if self.state.get("current_phase") != "external" or ":" not in key:
+        if self._active_external is None:
             return
-        tool, profile = key.split(":", 1)
-        target = str(self.state.get("current_target") or "")
+        tool, profile, target = self._active_external
+        key = f"{tool}:{profile}"
+        self.state["current_target"] = target
         self.state["current_detail"] = f"{target} | running {elapsed:.0f}s | pid={process_id or '-'}"
         self._upsert_external(
             key,
@@ -551,6 +638,7 @@ class RuntimeTelemetry:
         self._upsert_external(
             key,
             {
+                "target": self._active_external[2] if self._active_external else self.state.get("current_target", ""),
                 "status": status,
                 "finished_at": now_text(),
                 "duration_seconds": round(float(duration or 0), 1),
@@ -568,6 +656,8 @@ class RuntimeTelemetry:
             "running": "en ejecucion",
         }
         self.event("TOOL", f"{key} {estados.get(status, status)} parseados={parsed_count}")
+        if self._active_external and self._active_external[:2] == (tool, profile):
+            self._active_external = None
         self.write()
 
     def add_findings(self, findings: list[Finding]) -> None:
@@ -657,13 +747,12 @@ class RuntimeTelemetry:
         self.state["finding_unique"] = len({finding.fingerprint for finding in findings})
         self.state["finding_occurrences"] = len(findings)
 
-    def _update_global_percent(self, module_fraction: float) -> None:
+    def _update_global_percent(self, module_fraction: float, target: str | None = None) -> None:
         total_targets = max(1, int(self.state.get("target_total") or 1))
         completed = max(0, int(self.state.get("targets_completed") or 0))
-        module_slot = min(1.0, max(0.0, (self._current_module_index - 1 + module_fraction) / self._module_total_estimate))
-        current_target_index = max(0, int(self.state.get("target_index") or 0) - 1)
-        base = max(completed, current_target_index)
-        calculated = round(min(100.0, ((base + module_slot) / total_targets) * 100.0), 2)
+        index = self._module_index_by_target.get(target or "", self._current_module_index)
+        module_slot = min(1.0, max(0.0, (index - 1 + module_fraction) / self._module_total_estimate))
+        calculated = round(min(100.0, ((completed + module_slot) / total_targets) * 100.0), 2)
         previous = float(self.state.get("global_percent") or 0.0)
         self.state["global_percent"] = max(previous, calculated)
 
@@ -680,7 +769,7 @@ class Console:
 {Fore.RED}  ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝       ╚═╝   ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝
 {Fore.YELLOW}        [ SCAN TITAN :: WALL-BREACH VULNERABILITY ENGINE ]
 {Fore.CYAN}        [ ZERO-TOUCH | RECON | DAST | NMAP | NUCLEI | EVIDENCE ]
-{Fore.MAGENTA}        [ SCAN TITAN COMMUNITY | TATAKAE | ⚔️ v22.3.0 ⚔️ ]
+{Fore.MAGENTA}        [ SCAN TITAN COMMUNITY | TATAKAE | ⚔️ v22.5.0 ⚔️ ]
 """
         )
 
@@ -1007,6 +1096,8 @@ class PolicyEngine:
             enable_whatweb=self._tool_enabled(tools_cfg, "whatweb", True),
             enable_subfinder=self._tool_enabled(tools_cfg, "subfinder", True),
             enable_wafw00f=self._tool_enabled(tools_cfg, "wafw00f", True),
+            enable_katana=self._tool_enabled(tools_cfg, "katana", True),
+            enable_httpx=self._tool_enabled(tools_cfg, "httpx", True),
             enable_zap=self._tool_enabled(tools_cfg, "zap", False),
             external_observability=self._bool(external_cfg, "enabled", True),
             allow_cloud_ssrf=bool(getattr(self.args, "allow_cloud_ssrf", False))
@@ -1044,6 +1135,8 @@ class PolicyEngine:
             policy.enable_whatweb = True
             policy.enable_subfinder = True
             policy.enable_wafw00f = True
+            policy.enable_katana = True
+            policy.enable_httpx = True
             policy.enable_zap = True
             policy.external_observability = True
             policy.allow_cloud_ssrf = True
@@ -1212,10 +1305,10 @@ class RuntimeConfig:
         requested_target_concurrency = int(
             args.target_concurrency
             if args.target_concurrency is not None
-            else (1 if self.full_power else scan_cfg.get("target_concurrency", 1))
+            else scan_cfg.get("target_concurrency", 2)
         )
         self.concurrency = max(1, min(requested_concurrency, 20))
-        self.target_concurrency = max(1, min(requested_target_concurrency, 1))
+        self.target_concurrency = max(1, min(requested_target_concurrency, 2))
         requested_max_tests = int(
             args.max_tests
             if args.max_tests is not None
@@ -1283,15 +1376,18 @@ class RuntimeConfig:
         whatweb_cfg = tools_cfg.get("whatweb", {}) if isinstance(tools_cfg.get("whatweb"), dict) else {}
         subfinder_cfg = tools_cfg.get("subfinder", {}) if isinstance(tools_cfg.get("subfinder"), dict) else {}
         wafw00f_cfg = tools_cfg.get("wafw00f", {}) if isinstance(tools_cfg.get("wafw00f"), dict) else {}
+        katana_cfg = tools_cfg.get("katana", {}) if isinstance(tools_cfg.get("katana"), dict) else {}
+        httpx_cfg = tools_cfg.get("httpx", {}) if isinstance(tools_cfg.get("httpx"), dict) else {}
         zap_cfg = tools_cfg.get("zap", {}) if isinstance(tools_cfg.get("zap"), dict) else {}
         self.nmap_timeout = self._timeout_value(
             args.nmap_timeout,
             3600 if self.full_power else nmap_cfg.get("timeout_seconds", 1800),
         )
-        self.nuclei_timeout = self._timeout_value(
-            args.nuclei_timeout,
-            5400 if self.full_power else nuclei_cfg.get("timeout_seconds", 2400),
+        self.nuclei_timeout = max(
+            0, int(args.nuclei_timeout if args.nuclei_timeout is not None
+                   else nuclei_cfg.get("timeout_seconds", 0))
         )
+        self.nuclei_timeout_override = args.nuclei_timeout is not None
         self.nuclei_templates_path = str(nuclei_cfg.get("templates_path", "nuclei-templates") or "nuclei-templates")
         self.nuclei_origin_only = bool(nuclei_cfg.get("origin_only_broad_profiles", True))
         self.nuclei_idle_timeout = max(30, int(nuclei_cfg.get("idle_timeout_seconds", 180)))
@@ -1299,7 +1395,21 @@ class RuntimeConfig:
         self.ssh_username = str(nmap_cfg.get("ssh_username", "scan_titan_probe"))
         self.nuclei_system_resolvers = bool(nuclei_cfg.get("system_resolvers", True))
         self.nuclei_disable_host_error_skip = bool(nuclei_cfg.get("disable_host_error_skip", True))
-        self.nuclei_max_seed_urls = max(1, min(int(nuclei_cfg.get("max_seed_urls", 60) or 60), 250))
+        # Previously documented in config.yaml but never applied to the commands.
+        self.nuclei_severity = ",".join(
+            part.strip().lower() for part in str(nuclei_cfg.get("severity", "low,medium,high,critical")).split(",")
+            if part.strip().lower() in {"info", "low", "medium", "high", "critical", "unknown"}
+        ) or "low,medium,high,critical"
+        self.nuclei_retries = max(0, min(int(nuclei_cfg.get("retries", 1) or 0), 5))
+        self.nuclei_request_timeout = max(3, min(int(nuclei_cfg.get("request_timeout_seconds", 10) or 10), 60))
+        self.nuclei_update_templates = self._bool_config(nuclei_cfg.get("update_templates", True))
+        self.nuclei_templates_max_age_days = max(1, int(nuclei_cfg.get("templates_max_age_days", 7) or 7))
+        self.nuclei_dast_max_urls = max(1, min(int(nuclei_cfg.get("dast_max_urls", 40) or 40), 500))
+        if self.full_power:
+            self.nuclei_dast_max_urls = max(self.nuclei_dast_max_urls, 200)
+        configured_seeds = int(nuclei_cfg.get("max_seed_urls", 4) or 4)
+        self.nuclei_max_seed_urls = max(1, min(max(12, configured_seeds) if self.full_power
+                                                else configured_seeds, 250))
         self.whatweb_aggression = int(whatweb_cfg.get("aggression", 3 if self.full_power else 1) or 1)
         if self.full_power:
             self.whatweb_aggression = max(self.whatweb_aggression, 4)
@@ -1320,7 +1430,7 @@ class RuntimeConfig:
             else self._string_set(nuclei_cfg.get("profiles", ["vulnerability_scan"]))
         )
         self.nmap_profile_timeouts = self._int_map(nmap_cfg.get("profile_timeouts", {}), minimum=1)
-        self.nuclei_profile_timeouts = self._int_map(nuclei_cfg.get("profile_timeouts", {}), minimum=1)
+        self.nuclei_profile_timeouts = self._int_map(nuclei_cfg.get("profile_timeouts", {}), minimum=0)
         self.ffuf_timeout = int(1800 if self.full_power else (ffuf_cfg.get("timeout_seconds", 600) or 600))
         self.ffuf_threads = int(50 if self.full_power else (ffuf_cfg.get("threads", 20) or 20))
         self.ffuf_rate = int(100 if self.full_power else (ffuf_cfg.get("rate", 35) or 35))
@@ -1333,10 +1443,12 @@ class RuntimeConfig:
         self.whatweb_timeout = int(whatweb_cfg.get("timeout_seconds", 90) or 90)
         self.subfinder_timeout = int(subfinder_cfg.get("timeout_seconds", 180) or 180)
         self.wafw00f_timeout = int(300 if self.full_power else (wafw00f_cfg.get("timeout_seconds", 180) or 180))
+        self.katana_timeout = max(15, min(int(katana_cfg.get("timeout_seconds", 90) or 90), 300))
+        self.httpx_timeout = max(10, min(int(httpx_cfg.get("timeout_seconds", 30) or 30), 120))
         self.zap_host = str(zap_cfg.get("host", "127.0.0.1") or "127.0.0.1")
         self.zap_port = int(zap_cfg.get("port", 8090) or 8090)
         self.zap_api_url = str(zap_cfg.get("api_url") or f"http://{self.zap_host}:{self.zap_port}").rstrip("/")
-        self.zap_api_key = str(zap_cfg.get("api_key", "") or "")
+        self.zap_api_key = os.environ.get("SCAN_TITAN_ZAP_API_KEY", str(zap_cfg.get("api_key", "") or ""))
         self.zap_mode = str(
             getattr(args, "zap_mode", None)
             or ("active" if self.full_power else zap_cfg.get("mode", "baseline"))
@@ -1364,8 +1476,18 @@ class RuntimeConfig:
             1800,
         )
         self.zap_max_seed_urls = int(500 if self.full_power else (zap_cfg.get("max_seed_urls", 160) or 160))
-        self.zap_max_alerts = int(1000 if self.full_power else (zap_cfg.get("max_alerts", 500) or 500))
+        self.zap_max_alerts = int(
+            max(4000, int(zap_cfg.get("max_alerts", 2000) or 2000)) if self.full_power
+            else (zap_cfg.get("max_alerts", 2000) or 2000)
+        )
         self.zap_max_children = int(120 if self.full_power else (zap_cfg.get("max_children", 40) or 40))
+        # AJAX spider drives a headless browser so SPA routes rendered by
+        # JavaScript reach the site tree before the active scan.
+        self.zap_ajax_spider = self._bool_config(zap_cfg.get("ajax_spider", True))
+        self.zap_ajax_spider_browser = str(zap_cfg.get("ajax_spider_browser", "firefox-headless") or "firefox-headless")
+        self.zap_ajax_spider_timeout = max(30, int(
+            600 if self.full_power else (zap_cfg.get("ajax_spider_timeout_seconds", 240) or 240)))
+        self.zap_import_api_definitions = self._bool_config(zap_cfg.get("import_api_definitions", True))
         self.module_timeout = self._timeout_value(
             args.module_timeout,
             3600 if self.full_power else scan_cfg.get("module_timeout_seconds", 900),
@@ -1407,15 +1529,21 @@ class RuntimeConfig:
         return merged
 
     def _load_yaml(self, path: Path) -> dict[str, Any]:
-        if not path.exists() or not YAML_AVAILABLE:
+        if not path.exists():
             return {}
+        if not YAML_AVAILABLE:
+            raise ValueError("PyYAML is required to read an existing configuration file")
         try:
             with path.open("r", encoding="utf-8") as handle:
-                data = yaml.safe_load(handle) or {}
-            return data if isinstance(data, dict) else {}
-        except Exception as exc:
-            Console.warn(f"config.yaml ignored: {exc}")
-            return {}
+                data = yaml.safe_load(handle)
+            if data is None:
+                return {}
+            if not isinstance(data, dict):
+                raise ValueError("Configuration root must be a mapping")
+            return data
+        except Exception:
+            # Do not fall back to permissive defaults or echo credential-bearing YAML.
+            raise ValueError(f"Invalid configuration file: {path.name}") from None
 
     def _bool_config(self, value: Any) -> bool:
         if isinstance(value, str):
@@ -1439,7 +1567,7 @@ class RuntimeConfig:
         out: dict[str, int] = {}
         for key, raw in value.items():
             try:
-                if int(raw) > 0:
+                if int(raw) >= minimum:
                     out[str(key).strip().lower()] = max(minimum, int(raw))
             except (TypeError, ValueError):
                 continue
@@ -1513,11 +1641,14 @@ class RuntimeConfig:
         return not selected or profile.lower() in selected
 
     def external_profile_timeout(self, tool: str, profile: str, fallback: int) -> int:
+        if tool == "nuclei" and self.nuclei_timeout_override:
+            return max(0, int(self.nuclei_timeout))
         timeouts = self.nmap_profile_timeouts if tool == "nmap" else self.nuclei_profile_timeouts
+        minimum = 1 if tool == "nmap" else 0
         try:
-            return max(1, int(timeouts.get(profile.lower(), fallback)))
+            return max(minimum, int(timeouts.get(profile.lower(), fallback)))
         except (TypeError, ValueError):
-            return max(1, int(fallback or 1))
+            return max(minimum, int(fallback or 0))
 
     def ensure_audit_id(self) -> str:
         if not self.technical_detail.enabled:
@@ -1884,6 +2015,11 @@ class StateStore:
                 "remediation": finding.remediation,
                 "recommendation": finding.recommendation,
                 "manual_command": finding.manual_command,
+                "validation": finding.validation,
+                "param": finding.param,
+                "method": finding.method,
+                "endpoint": finding.endpoint,
+                "source": finding.source,
                 "evidence_artifact": finding.evidence_artifact or record.get("evidence_artifact", ""),
                 "console_artifact": finding.console_artifact or record.get("console_artifact", ""),
                 "browser_artifact": finding.browser_artifact or record.get("browser_artifact", ""),
@@ -1902,7 +2038,8 @@ class StateStore:
 
     def active_records(self) -> list[dict[str, Any]]:
         return sorted(
-            [r for r in self.data.get("findings", {}).values() if r.get("state") == "ACTIVE"],
+            [r for r in self.data.get("findings", {}).values() if r.get("state") == "ACTIVE"
+             and not finding_quality_exclusion(r) and not is_discarded(r)],
             key=lambda r: (
                 SEVERITY_ORDER.get(normalize_severity(r.get("severity", "Info")), 99),
                 str(r.get("target", "")),
@@ -2037,6 +2174,7 @@ class ReportWriter:
             "console_artifact": finding.console_artifact,
             "browser_artifact": finding.browser_artifact,
             "details": finding.details,
+            "validation": finding.validation,
         }
 
     def write_history(self, results: list[dict[str, Any]], timestamp: str) -> Path:
@@ -2260,6 +2398,20 @@ class ReportWriter:
 class ExternalTools:
     MAX_EXTERNAL_OUTPUT_BYTES = 8 * 1024 * 1024
     MAX_FFUF_RECON_HITS = 10000
+    # Zero-touch TCP surface: every well-known port plus the high ports where
+    # databases, message brokers, container/orchestration APIs, Java app
+    # servers and remote administration commonly listen. --full uses 1-65535.
+    NMAP_TCP_PORTS = (
+        "1-1024,1080,1099,1433,1434,1521,1583,1723,1883,2000,2049,2121,2181,2222,2375,2376,"
+        "2379,2380,2483,2484,3000,3001,3128,3268,3269,3306,3389,3690,4000,4243,4369,4443,"
+        "4444,4505,4506,4567,4848,4899,5000,5001,5005,5009,5432,5555,5601,5672,5800,5900,"
+        "5901,5984,5985,5986,6000,6001,6379,6443,6666,6667,7000,7001,7002,7070,7071,7199,"
+        "7443,7474,7547,7777,8000,8001,8008,8009,8010,8080,8081,8082,8083,8086,8088,8089,"
+        "8090,8091,8161,8180,8181,8200,8222,8291,8333,8443,8444,8500,8530,8531,8761,8834,"
+        "8880,8888,8983,9000,9001,9042,9043,9060,9080,9090,9091,9092,9100,9160,9200,9300,"
+        "9418,9443,9999,10000,10250,10255,10443,11211,15672,16992,16993,27017,27018,28017,"
+        "47001,50000,50070,50075,61616"
+    )
 
     def __init__(self, config: RuntimeConfig) -> None:
         self.config = config
@@ -2268,6 +2420,7 @@ class ExternalTools:
         )
         self._whatweb_official_cache: dict[str, bool] = {}
         self._zap_lock = asyncio.Lock()
+        self._httpx_official_cache: dict[str, bool] = {}
 
     def _external_report_path(self, tool: str, filename: str) -> Path:
         """Return the centralized raw-output path for an external engine."""
@@ -2290,12 +2443,18 @@ class ExternalTools:
             "whatweb",
             "subfinder",
             "wafw00f",
+            "katana",
+            "httpx",
             "zap",
             "zap.bat",
             "zaproxy",
         ]
         for name in tool_names:
-            source = shutil.which(name) or ""
+            source = (
+                self._resolve_binary(name, name)
+                if name in {"katana", "httpx"}
+                else shutil.which(name)
+            ) or ""
             inventory.append(
                 {
                     "tool": name,
@@ -2357,7 +2516,20 @@ class ExternalTools:
             return []
         if ctx.recon.get('http_availability', {}).get('state') == 'unreachable':
             ctx.recon.setdefault('policy_deferred_tests', []).append('web_tools_no_http_response')
-            return await self.run_nmap(ctx) if self.config.policy.enable_nmap else []
+            if not self.config.policy.enable_nmap:
+                return []
+            service_findings = await self.run_nmap(ctx)
+            # Non-web hosts still expose network services: run only the
+            # host:port Nuclei profile against what Nmap found open.
+            if (ctx.recon.get('open_ports') and getattr(self.config.policy, 'enable_nuclei', False)
+                    and not self.config.runtime_control.finish_requested):
+                try:
+                    service_findings.extend(await self.run_nuclei(ctx, network_only=True))
+                except Exception as exc:
+                    Console.warn(f"Orquestacion Nuclei (servicios) fallida: {exc}")
+            return service_findings
+        if not ctx.recon.get('_external_recon_ran'):
+            await self.run_recon_extensions(ctx)
         findings: list[Finding] = []
         if self.config.policy.enable_whatweb:
             try:
@@ -2423,6 +2595,18 @@ class ExternalTools:
         else:
             Console.warn("FFUF deshabilitado por politica")
         await asyncio.sleep(1.0)
+        if self.config.policy.enable_nuclei:
+            try:
+                await self.config.runtime_control.wait_if_paused()
+                if self.config.runtime_control.finish_requested:
+                    Console.warn("Nuclei omitido por finalizacion ordenada")
+                    return findings
+                findings.extend(await self.run_nuclei(ctx))
+            except Exception as exc:
+                Console.warn(f"Orquestacion Nuclei fallida: {exc}")
+        else:
+            Console.warn("Nuclei deshabilitado por politica")
+        await asyncio.sleep(1.0)
         if self.config.policy.enable_zap:
             try:
                 await self.config.runtime_control.wait_if_paused()
@@ -2435,19 +2619,94 @@ class ExternalTools:
                 Console.warn(f"Orquestacion ZAP fallida: {exc}")
         else:
             Console.warn("ZAP deshabilitado por politica")
-        await asyncio.sleep(1.0)
-        if self.config.policy.enable_nuclei:
-            try:
+        return findings
+
+    async def run_recon_extensions(self, ctx: ScanContext) -> None:
+        """Feed same-origin recon into downstream modules without emitting findings."""
+        if self.config.skip_external or ctx.recon.get('_external_recon_ran'):
+            return
+        ctx.recon['_external_recon_ran'] = True
+        queue = ExternalCommandQueue(self._run_command, max_pending=2)
+        try:
+            for name in ('katana', 'httpx'):
+                if not getattr(self.config.policy, f'enable_{name}', False):
+                    continue
                 await self.config.runtime_control.wait_if_paused()
                 if self.config.runtime_control.finish_requested:
-                    Console.warn("Nuclei omitido por finalizacion ordenada")
-                    return findings
-                findings.extend(await self.run_nuclei(ctx))
-            except Exception as exc:
-                Console.warn(f"Orquestacion Nuclei fallida: {exc}")
+                    return
+                try:
+                    await self._run_recon_tool(name, ctx, queue)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    Console.warn(f'{name}: fallo de integracion: {clean_text(exc, 180)}')
+                    ctx.recon.setdefault('external_coverage', []).append({
+                        'tool': name, 'state': 'partial', 'reason': clean_text(exc, 180),
+                    })
+        finally:
+            await queue.close()
+
+    async def _run_recon_tool(
+        self, name: str, ctx: ScanContext, queue: ExternalCommandQueue,
+    ) -> None:
+        binary = self._resolve_binary(name, name)
+        if not binary:
+            Console.warn(f'{name} no encontrado en PATH')
+            ctx.recon.setdefault('policy_deferred_tests', []).append(f'{name}:not_installed')
+            return
+        if name == 'httpx':
+            supported = self._httpx_official_cache.get(binary)
+            if supported is None:
+                help_out, help_err, expired, rc, _ = await queue.run([binary, '-h'], 8)
+                supported = not expired and rc == 0 and is_projectdiscovery_httpx_help(help_out + help_err)
+                self._httpx_official_cache[binary] = supported
+            if not supported:
+                Console.warn('httpx de ProjectDiscovery no detectado; se omite el ejecutable de otro paquete')
+                ctx.recon.setdefault('policy_deferred_tests', []).append('httpx:wrong_binary')
+                return
+        slug = self._slug(ctx.target.display)
+        stamp = datetime.now().strftime('%Y%m%d_%H%M%S') + '_' + uuid.uuid4().hex[:6]
+        export = self._external_report_path(name, f'{name}_out_{slug}_{stamp}.jsonl')
+        timeout = self.config.katana_timeout if name == 'katana' else self.config.httpx_timeout
+        cmd = (katana_command(binary, ctx.target.url, str(export), timeout)
+               if name == 'katana' else httpx_command(binary, ctx.target.url, str(export)))
+        Console.step(f'{name} iniciado -> {ctx.target.url}')
+        Console.step(f'{name} comando: {self._format_command(cmd)}')
+        if self.config.telemetry:
+            self.config.telemetry.external_start(name, 'reconocimiento', ctx.target.display, cmd)
+        stdout, stderr, timed_out, returncode, duration = await queue.run(cmd, timeout)
+        result_text = stdout
+        if export.is_file():
+            with export.open('r', encoding='utf-8', errors='replace') as handle:
+                result_text = handle.read(2 * 1024 * 1024)
+        parsed_count = 0
+        if name == 'katana':
+            endpoints = parse_katana(result_text, ctx.target.url)
+            previous = ctx.recon.setdefault('endpoints', [])
+            seen = {item.get('url') for item in previous if isinstance(item, dict)}
+            previous.extend(item for item in endpoints if item['url'] not in seen)
+            parsed_count = len(endpoints)
         else:
-            Console.warn("Nuclei deshabilitado por politica")
-        return findings
+            records = parse_projectdiscovery_httpx(result_text, ctx.target.url)
+            ctx.recon['httpx_metadata'] = records
+            technologies = ctx.recon.setdefault('technologies', [])
+            for item in records:
+                for label in item['technologies'] + ([item['webserver']] if item['webserver'] else []):
+                    if label not in technologies:
+                        technologies.append(label)
+            parsed_count = len(records)
+        failed = timed_out or returncode != 0
+        reason = self._empty_reason(returncode, timed_out, stderr, stdout, export, parsed_count)
+        ctx.recon.setdefault('external_coverage', []).append({
+            'tool': name, 'state': 'partial' if failed else 'completed',
+            'reason': reason if failed else '', 'parsed': parsed_count,
+        })
+        self._log_external(
+            name, 'reconocimiento', cmd, returncode, timed_out, stderr, stdout,
+            export_path=export, duration=duration, parsed_count=parsed_count,
+            empty_reason=reason, target=ctx.target.display,
+        )
+        Console.ok(f'{name} finalizado: rc={returncode} duracion={duration:.1f}s rutas/hosts={parsed_count}')
 
     def _resolve_binary(self, tool: str, default: str) -> str | None:
         tools_cfg = self.config.config_data.get("tools", {}) if isinstance(self.config.config_data.get("tools"), dict) else {}
@@ -2460,6 +2719,23 @@ class ExternalTools:
                 BASE_DIR / "tools" / "whatweb" / "whatweb",
             ):
                 if candidate.exists():
+                    return str(candidate)
+        if tool in {"katana", "httpx"}:
+            if configured != default:
+                custom = shutil.which(configured)
+                if custom:
+                    return custom
+                custom_path = Path(configured)
+                if not custom_path.is_absolute():
+                    custom_path = BASE_DIR / custom_path
+                if custom_path.is_file():
+                    return str(custom_path)
+            suffix = ".exe" if os.name == "nt" else ""
+            for candidate in (
+                BASE_DIR / "tools" / "bin" / f"{tool}{suffix}",
+                Path.home() / "go" / "bin" / f"{tool}{suffix}",
+            ):
+                if candidate.is_file():
                     return str(candidate)
         resolved = shutil.which(configured)
         if resolved:
@@ -2712,6 +2988,10 @@ class ExternalTools:
             Console.warn("ffuf no encontrado en PATH")
             return []
         wordlist = self._write_ffuf_wordlist(ctx)
+        if not wordlist.read_text(encoding="utf-8").strip():
+            wordlist.unlink(missing_ok=True)
+            Console.ok("FFUF: rutas ya cubiertas por el motor compartido")
+            return []
         slug = self._slug(ctx.target.display)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         export_path = REPORTS_DIR / f"ffuf_out_{slug}_{stamp}.json"
@@ -2782,14 +3062,18 @@ class ExternalTools:
         def xml_path(profile: str) -> Path:
             return self._external_report_path("nmap", f"nmap_out_{slug}_{profile}_{stamp}.xml")
 
-        network_ports = self._nmap_ports_for(
-            ctx,
-            "1-1024,2049,3000,5000,5601,5985,5986,8000,8080,8081,8443,8888,9000,9090,9091,9443,10000,10443",
-        )
+        full_range = bool(self.config.full_power)
+        network_ports = "1-65535" if full_range else self._nmap_ports_for(ctx, self.NMAP_TCP_PORTS)
         tls_ports = self._nmap_ports_for(ctx, "443,8443,9443,10443")
         http_ports = self._nmap_ports_for(ctx, "80,443,8080,8443,9000,9090,9091")
         cve_ports = self._nmap_ports_for(ctx, "80,443,445,8080,8443,9000,9090,9091")
         findings: list[Finding] = []
+        # vulners already has a dedicated --version-all profile; running it in
+        # the base pass duplicated every CVE under a second title.
+        vulners_dedicated = self.config.external_profile_enabled("nmap", "vulners_cvss")
+        vuln_expr = "(vuln and safe and not vulners)" if vulners_dedicated else "(vuln and safe)"
+        base_scripts = " or ".join(["default", vuln_expr, "sslv2", "ssl-enum-ciphers", *EXTRA_SAFE_SCRIPTS])
+        rate_args = ["--min-rate", "300", "--max-retries", "2"] if full_range else []
         profiles = [
             (
                 "network_vulnerability_scan",
@@ -2797,11 +3081,13 @@ class ExternalTools:
                     binary,
                     "-sV",
                     "-Pn",
-                    "--version-light",
+                    *rate_args,
                     "-p",
                     network_ports,
                     "--script",
-                    "default or (vuln and safe) or sslv2 or ssl-enum-ciphers",
+                    base_scripts,
+                    "--script-timeout",
+                    "120s",
                     "-oX",
                     str(xml_path("network_vulnerability_scan")),
                     nmap_target,
@@ -2872,17 +3158,31 @@ class ExternalTools:
             getattr(self.config, 'ssh_username', 'scan_titan_probe')), ssh_output))
         smb_output = xml_path('smb_security')
         profiles.append(('smb_security', NmapNetworkAuditor.command(binary, nmap_target, smb_output), smb_output))
+        udp_output = xml_path('udp_services')
+        profiles.append(('udp_services', [
+            binary, '-sU', '-Pn', '--max-retries', '2', '-p', UDP_PORTS, '--script', UDP_SCRIPTS,
+            '--script-timeout', '60s', '--host-timeout', '420s', '-oX', str(udp_output), nmap_target,
+        ], udp_output))
         profiles = [item for item in profiles if self.config.external_profile_enabled("nmap", item[0])]
         if ctx.recon.get('http_availability', {}).get('state') == 'unreachable':
             profiles = [item for item in profiles if item[0] not in {'ssl_tls_surface', 'http_slowloris_check'}]
         if not profiles:
             Console.warn("Nmap omitido: no hay perfiles habilitados en config.yaml")
             return []
+        network_profile_complete = False
         for name, cmd, export_path in profiles:
             await self.config.runtime_control.wait_if_paused()
             if self.config.runtime_control.finish_requested:
                 Console.warn(f"Perfil Nmap omitido por finalizacion ordenada: {name}")
                 break
+            if name == "http_slowloris_check" and network_profile_complete and not self.config.full_power:
+                Console.ok("Nmap http-slowloris-check cubierto por el perfil vuln/safe base")
+                ctx.recon.setdefault('external_coverage', []).append({
+                    'tool': 'nmap', 'profile': name, 'state': 'completed',
+                    'reason': 'http-slowloris-check pertenece a las categorias vuln,safe',
+                    'covered_by': 'network_vulnerability_scan',
+                })
+                continue
             if name == 'ssh_security':
                 for service in ctx.recon.get('ports_services', []):
                     if 'ssh' in str(service).lower():
@@ -2908,9 +3208,20 @@ class ExternalTools:
             except OSError as exc:
                 Console.warn(f"No se pudo leer la evidencia XML de Nmap: {clean_text(exc, 220)}")
             parsed = self._parse_nmap(ctx, xml_text, name)
+            if name == "network_vulnerability_scan":
+                network_profile_complete = (
+                    returncode == 0 and not timed_out and '<nmaprun' in xml_text
+                )
+            state = 'partial' if timed_out or returncode != 0 or '<nmaprun' not in xml_text else 'completed'
+            reason = ''
+            if name == 'udp_services' and re.search(
+                    r'requires root privileges|dnet: failed to open device|only ethernet devices', stderr, re.I):
+                state = 'unavailable'
+                reason = 'UDP requiere privilegios de captura (Npcap/administrador); no equivale a seguro.'
+                Console.warn(f"Nmap udp_services no disponible: {reason}")
             ctx.recon.setdefault('external_coverage', []).append({
                 'tool': 'nmap', 'profile': name, 'returncode': returncode,
-                'state': 'partial' if timed_out or returncode != 0 or '<nmaprun' not in xml_text else 'completed',
+                'state': state, 'reason': reason,
                 'parsed': len(parsed), 'export': str(export_path), 'timed_out': timed_out,
             })
             Console.ok(f"Nmap perfil finalizado: {name} rc={returncode} duracion={duration:.1f}s parseados={len(parsed)}")
@@ -2979,18 +3290,23 @@ class ExternalTools:
                 merged.append([start, end])
         return ",".join(str(start) if start == end else f"{start}-{end}" for start, end in merged)
 
-    async def run_nuclei(self, ctx: ScanContext) -> list[Finding]:
+    async def run_nuclei(self, ctx: ScanContext, *, network_only: bool = False) -> list[Finding]:
         binary = self._resolve_binary("nuclei", "nuclei")
         if not binary:
             Console.warn("Nuclei no encontrado en PATH")
             ctx.recon.setdefault('external_coverage', []).append({'tool': 'nuclei', 'state': 'unavailable'})
             return []
+        await self._ensure_nuclei_templates_fresh(binary, ctx)
         profiles = [
             item
             for item in self._nuclei_profiles(binary, ctx)
             if self.config.external_profile_enabled("nuclei", item[0])
         ]
-        profiles.sort(key=lambda item: {'conservative_scan': 0, 'vulnerability_scan': 1, 'cve_scan': 2}.get(item[0], 3))
+        if network_only:
+            profiles = [item for item in profiles if item[0] == 'network_services_scan']
+        profiles.sort(key=lambda item: {
+            'vulnerability_scan': 0, 'cve_scan': 1, 'network_services_scan': 2,
+            'dast_scan': 3, 'conservative_scan': 4}.get(item[0], 5))
         all_findings: list[Finding] = []
         seen: set[str] = set()
         if not profiles:
@@ -3058,6 +3374,7 @@ class ExternalTools:
         return all_findings
 
     async def run_zap(self, ctx: ScanContext) -> list[Finding]:
+        self._validate_zap_connection()
         mode = self.config.zap_mode
         if mode == "active" and not self.config.policy.allow_state_changing_api_tests:
             Console.warn("Modo activo de ZAP degradado a baseline por politica")
@@ -3069,6 +3386,7 @@ class ExternalTools:
         started = time.monotonic()
         zap_process: asyncio.subprocess.Process | None = None
         started_daemon = False
+        owned_authenticated = False
         ready = False
         ctx.recon['_zap_export_path'] = str(export_path)
         ctx.recon['_zap_cached_alerts'] = []
@@ -3077,6 +3395,9 @@ class ExternalTools:
             self.config.telemetry.external_start("zap", mode, ctx.target.display, command_label)
         try:
             ready = await self._zap_wait_ready(self.config.zap_startup_timeout if not self.config.zap_start_daemon else 3)
+            if ready and not getattr(self.config, "zap_api_key", ""):
+                ready = False
+                raise RuntimeError("Existing ZAP requires a configured API key; set SCAN_TITAN_ZAP_API_KEY. No scan was started.")
             if not ready:
                 if not self.config.zap_start_daemon:
                     reason = "La API de ZAP no responde y start_daemon=false."
@@ -3097,6 +3418,7 @@ class ExternalTools:
                         target=ctx.target.display,
                     )
                     return []
+                self._validate_zap_connection(managed=True)
                 binary = self._resolve_zap_binary()
                 if not binary:
                     reason = "No se encontro el binario de ZAP en PATH ni en rutas comunes de Windows."
@@ -3151,6 +3473,11 @@ class ExternalTools:
                 )
                 return []
 
+            if started_daemon:
+                ready = False
+                await self._zap_assert_managed_auth()
+                owned_authenticated = True
+                ready = True
             version = await self._zap_api("core/view/version")
             Console.ok(f"API de ZAP lista: version={version.get('version', '-')}")
             await self._zap_rule_inventory(ctx)
@@ -3168,8 +3495,12 @@ class ExternalTools:
             seeds = self._zap_seed_urls(ctx)
             accessed = await self._zap_access_urls(ctx, seeds)
             spider_count = 0
+            ajax_count = 0
+            api_imports = await self._zap_import_api_definitions(ctx)
             if mode in {"baseline", "active"}:
                 spider_count = await self._zap_spider(ctx, ctx.target.url)
+                if getattr(self.config, 'zap_ajax_spider', False):
+                    ajax_count = await self._zap_ajax_spider(ctx, ctx.target.url)
             passive_records = await self._zap_wait_passive(ctx)
             active_count = 0
             active_completed = True
@@ -3195,6 +3526,9 @@ class ExternalTools:
                 "version": version.get("version", ""),
                 "accessed_urls": accessed,
                 "spider_records": spider_count,
+                "ajax_spider_records": ajax_count,
+                "api_definitions_imported": api_imports,
+                "active_scope": ctx.recon.get('zap_active_scope', ''),
                 "active_records": active_count,
                 "active_completed": active_completed,
                 "active_progress": active_progress,
@@ -3260,7 +3594,8 @@ class ExternalTools:
             )
             Console.ok(
                 "ZAP finalizado: "
-                f"modo={mode} urls_accedidas={accessed} spider={spider_count} "
+                f"modo={mode} urls_accedidas={accessed} spider={spider_count} ajax={ajax_count} "
+                f"api_importadas={api_imports} alcance_activo={ctx.recon.get('zap_active_scope', '-')} "
                 f"activo={active_count} alertas={len(alerts)}/{raw_alert_count} hallazgos={len(findings)}"
             )
             return findings
@@ -3294,6 +3629,9 @@ class ExternalTools:
             )
             return partial_findings
         finally:
+            if ctx.recon.pop('_zap_ajax_running', None):
+                with contextlib.suppress(Exception):
+                    await self._zap_api('ajaxSpider/action/stop', timeout=5)
             for component, scan_id in ctx.recon.pop('_zap_running', {}).items():
                 with contextlib.suppress(Exception):
                     await self._zap_api(f'{component}/action/stop', {'scanId': scan_id}, timeout=5)
@@ -3301,8 +3639,12 @@ class ExternalTools:
             if context_name:
                 with contextlib.suppress(Exception):
                     await self._zap_api('context/action/removeContext', {'contextName': context_name}, timeout=5)
-            if started_daemon and self.config.zap_shutdown_after_scan:
-                await self._zap_shutdown(zap_process)
+            if started_daemon:
+                if not owned_authenticated:
+                    if zap_process is not None:
+                        await self._terminate_process(zap_process)
+                elif self.config.zap_shutdown_after_scan:
+                    await self._zap_shutdown(zap_process)
 
     async def _zap_rule_inventory(self, ctx: ScanContext) -> None:
         rules = await self._zap_api('pscan/view/scanners', timeout=10)
@@ -3318,24 +3660,43 @@ class ExternalTools:
         if missing:
             Console.warn(f'ZAP cobertura pasiva incompleta: reglas base ausentes/desactivadas={missing}; revise complementos y zap_daemon*.log')
 
+    # ZAP riskId values: 3=High, 2=Medium, 1=Low, 0=Informational.
+    ZAP_RISK_ORDER = ('3', '2', '1', '0')
+
     async def _zap_checkpoint(self, ctx: ScanContext, state: str) -> list[dict[str, Any]]:
-        """Page alerts and persist usable results before the next long phase."""
+        """Page alerts by descending risk and persist them before the next phase.
+
+        ZAP returns alerts ordered by creation id. Passive instances (headers,
+        cookies, User Agent Fuzzer) are raised first, so a plain capped listing
+        silently discarded the later active-scan alerts. Paging per risk level
+        guarantees the cap only ever truncates the lowest risks.
+        """
         alerts: list[dict[str, Any]] = []
         cap = max(1, self.config.zap_max_alerts)
         base = self._origin_url(ctx.target.url)
-        while len(alerts) < cap:
-            count = min(100, cap - len(alerts))
-            payload = await self._zap_api('core/view/alerts', {
-                'baseurl': base, 'start': str(len(alerts)), 'count': str(count)}, timeout=10)
-            page = payload.get('alerts', [])
-            if not isinstance(page, list):
-                raise RuntimeError('Invalid ZAP alerts payload')
-            if any(not isinstance(item, dict) for item in page):
-                raise RuntimeError('Invalid ZAP alert entry')
-            alerts.extend(page)
-            if len(page) < count:
+        capped = False
+        for risk_id in self.ZAP_RISK_ORDER:
+            start = 0
+            while len(alerts) < cap:
+                count = min(100, cap - len(alerts))
+                payload = await self._zap_api('core/view/alerts', {
+                    'baseurl': base, 'start': str(start), 'count': str(count),
+                    'riskId': risk_id}, timeout=10)
+                page = payload.get('alerts', [])
+                if not isinstance(page, list):
+                    raise RuntimeError('Invalid ZAP alerts payload')
+                if any(not isinstance(item, dict) for item in page):
+                    raise RuntimeError('Invalid ZAP alert entry')
+                alerts.extend(page)
+                start += len(page)
+                if len(page) < count:
+                    break
+            else:
+                capped = True
+            if len(alerts) >= cap:
+                capped = True
                 break
-        ctx.recon['zap_alerts_capped'] = len(alerts) >= cap
+        ctx.recon['zap_alerts_capped'] = capped
         ctx.recon['_zap_cached_alerts'] = alerts
         raw_path = ctx.recon.get('_zap_export_path')
         if raw_path:
@@ -3405,36 +3766,74 @@ class ExternalTools:
                 return str(path)
         return None
 
+    def _validate_zap_connection(self, *, managed: bool = False) -> None:
+        url = str(getattr(self.config, "zap_api_url", ""))
+        if any(ord(char) < 32 for char in url):
+            raise ValueError("Invalid ZAP API URL")
+        try:
+            parsed = urllib.parse.urlsplit(url)
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        except ValueError:
+            raise ValueError("Invalid ZAP API URL or port") from None
+        if (parsed.scheme not in {"http", "https"} or not parsed.hostname
+                or parsed.username is not None or parsed.password is not None
+                or parsed.query or parsed.fragment):
+            raise ValueError("ZAP API URL must be HTTP(S), without credentials, query or fragment")
+        key = getattr(self.config, "zap_api_key", "")
+        if not isinstance(key, str) or any(ord(char) < 32 for char in key):
+            raise ValueError("Invalid ZAP API key")
+        if managed:
+            host = getattr(self.config, "zap_host", "127.0.0.1")
+            daemon_port = getattr(self.config, "zap_port", 8090)
+            local = {"127.0.0.1", "::1", "localhost"}
+            if (host not in local or parsed.hostname != host or parsed.scheme != "http"
+                    or parsed.path not in {"", "/"} or port != daemon_port
+                    or not isinstance(daemon_port, int) or not 1 <= daemon_port <= 65535):
+                raise ValueError("Managed ZAP must bind loopback with a matching local API URL/port; configure an external authenticated instance for remote use")
+
     def _zap_daemon_command(self, binary: str) -> list[str]:
+        self._validate_zap_connection(managed=True)
+        if not getattr(self.config, "zap_api_key", ""):
+            self.config.zap_api_key = secrets.token_urlsafe(32)
         daemon_home = self.external_reports_dir / 'zap_runtime'
         daemon_home.mkdir(parents=True, exist_ok=True)
-        cmd = [
-            binary,
-            "-daemon",
-            "-silent",
-            "-dir",
-            str(daemon_home.resolve()),
-            "-host",
-            self.config.zap_host,
-            "-port",
-            str(self.config.zap_port),
-            "-config",
-            "api.addrs.addr.name=.*",
-            "-config",
-            "api.addrs.addr.regex=true",
+        host = self.config.zap_host
+        api_address = "::1" if host == "::1" else "127.0.0.1"
+        return [
+            binary, "-daemon", "-silent", "-dir", str(daemon_home.resolve()),
+            "-host", host, "-port", str(self.config.zap_port),
+            "-config", f"api.addrs.addr.name={api_address}",
+            "-config", "api.addrs.addr.regex=false",
+            "-config", "api.disablekey=false",
+            "-config", "api.nokeyforsafeops=false",
+            "-config", "api.reportpermerrors=true",
+            "-config", f"api.key={self.config.zap_api_key}",
         ]
-        if self.config.zap_api_key:
-            cmd.extend(["-config", f"api.key={self.config.zap_api_key}"])
-        else:
-            cmd.extend(["-config", "api.disablekey=true"])
-        return cmd
+
+    async def _zap_assert_managed_auth(self) -> None:
+        """Reject an unprotected service that may have won a daemon startup race."""
+        await self._zap_api("core/view/sites", timeout=5)
+        url = f"{self.config.zap_api_url}/JSON/core/view/sites/"
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5), trust_env=False) as session:
+            async with session.get(url, allow_redirects=False) as response:
+                if response.status in {401, 403}:
+                    return
+                if response.status == 400:
+                    try:
+                        denial = json.loads(await response.text(errors="replace"))
+                    except (ValueError, TypeError):
+                        denial = None
+                    if isinstance(denial, dict) and str(denial.get("code", "")).lower() == "bad_api_key":
+                        return
+                raise RuntimeError("Managed ZAP did not enforce API authentication; no scan was started")
 
     async def _zap_wait_ready(self, timeout_seconds: int) -> bool:
         deadline = time.monotonic() + max(1, timeout_seconds)
         while time.monotonic() < deadline:
             try:
-                await self._zap_api("core/view/version", timeout=5)
-                return True
+                result = await self._zap_api("core/view/version", timeout=5)
+                if result.get("version"):
+                    return True
             except Exception:
                 await asyncio.sleep(2.0)
         return False
@@ -3446,22 +3845,33 @@ class ExternalTools:
         *,
         timeout: int | None = None,
     ) -> dict[str, Any]:
+        self._validate_zap_connection()
         clean_path = path.strip("/")
+        key = getattr(self.config, "zap_api_key", "")
+        if not key and clean_path != "core/view/version":
+            raise RuntimeError("ZAP API key required before requesting scan data or actions")
         url = f"{self.config.zap_api_url}/JSON/{clean_path}/"
         query = {str(k): str(v) for k, v in (params or {}).items() if v is not None}
-        if self.config.zap_api_key:
-            query["apikey"] = self.config.zap_api_key
+        if any(name.lower() == "apikey" for name in query):
+            raise ValueError("ZAP credentials are managed by the client, not query parameters")
+        headers = {"X-ZAP-API-Key": key} if key else {}
         request_timeout = aiohttp.ClientTimeout(total=max(3, int(timeout or min(self.config.zap_timeout, 30))))
         async with aiohttp.ClientSession(timeout=request_timeout, trust_env=False) as session:
-            async with session.get(url, params=query) as response:
+            async with session.get(url, params=query, headers=headers, allow_redirects=False) as response:
+                if response.status != 200:
+                    raise RuntimeError(f"ZAP API returned HTTP {response.status}; redirects are disabled")
                 text = await response.text(errors="replace")
         try:
             data = json.loads(text or "{}")
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"ZAP devolvio una respuesta no JSON desde {clean_path}: {clean_text(text, 200)}") from exc
+        except json.JSONDecodeError:
+            raise RuntimeError(f"ZAP returned a non-JSON response from {clean_path}") from None
         if isinstance(data, dict) and data.get("code"):
             code = str(data.get("code"))
-            message = data.get("message") or data.get("detail") or ""
+            if key:
+                code = code.replace(key, "[REDACTED]")
+            message = str(data.get("message") or data.get("detail") or "")
+            if key:
+                message = message.replace(key, "[REDACTED]")
             if code.lower() in {"bad_api_key", "unauthorized"}:
                 raise RuntimeError(
                     "ZAP rechazo la API key configurada. Defina tools.zap.api_key o permita que Scan Titan inicie ZAP."
@@ -3660,6 +4070,90 @@ class ExternalTools:
             return len(found)
         return 0
 
+    async def _zap_import_api_definitions(self, ctx: ScanContext) -> int:
+        """Import same-origin OpenAPI/GraphQL definitions found by api_dast.
+
+        Imported operations become site-tree nodes, so the active scan attacks
+        documented API parameters that a link spider never reaches.
+        """
+        if not getattr(self.config, 'zap_import_api_definitions', True):
+            return 0
+        imported = 0
+        records: list[dict[str, Any]] = []
+        for spec in list(ctx.recon.get('api_specs', []) or [])[:5]:
+            url = self._zap_normalize_seed(ctx, str(spec))
+            if not url:
+                continue
+            try:
+                await self._zap_api('openapi/action/importUrl', {
+                    'url': url, 'contextId': ctx.recon.get('_zap_context_id')}, timeout=120)
+                imported += 1
+                records.append({'type': 'openapi', 'url': url, 'state': 'imported'})
+            except Exception as exc:
+                records.append({'type': 'openapi', 'url': url, 'state': 'failed',
+                                'reason': clean_text(exc, 200)})
+        for endpoint in list(ctx.recon.get('graphql_endpoints', []) or [])[:3]:
+            url = self._zap_normalize_seed(ctx, str(endpoint))
+            if not url:
+                continue
+            try:
+                await self._zap_api('graphql/action/importUrl', {'endurl': url}, timeout=120)
+                imported += 1
+                records.append({'type': 'graphql', 'url': url, 'state': 'imported'})
+            except Exception as exc:
+                records.append({'type': 'graphql', 'url': url, 'state': 'failed',
+                                'reason': clean_text(exc, 200)})
+        if records:
+            ctx.recon['zap_api_imports'] = records
+            Console.ok(f"ZAP definiciones API importadas: {imported}/{len(records)}")
+        return imported
+
+    async def _zap_ajax_spider(self, ctx: ScanContext, url: str) -> int:
+        """Run the browser-driven AJAX spider with a hard wall-clock limit."""
+        timeout = max(30, int(getattr(self.config, 'zap_ajax_spider_timeout', 240)))
+        stage = ctx.recon.setdefault('zap_stages', {})
+        Console.step(f"AJAX Spider ZAP iniciado -> {url} ({self.config.zap_ajax_spider_browser})")
+        try:
+            await self._zap_api('ajaxSpider/action/setOptionBrowserId',
+                                {'String': self.config.zap_ajax_spider_browser}, timeout=10)
+            await self._zap_api('ajaxSpider/action/setOptionMaxDuration',
+                                {'Integer': str(max(1, timeout // 60))}, timeout=10)
+            await self._zap_api('ajaxSpider/action/scan', {
+                'url': url, 'inScope': 'true', 'contextName': ctx.recon.get('_zap_context_name'),
+                'subtreeOnly': 'false'}, timeout=30)
+        except Exception as exc:
+            stage['ajax_spider'] = {'state': 'unavailable', 'reason': clean_text(exc, 240)}
+            Console.warn(f"AJAX Spider ZAP no disponible: {clean_text(exc, 200)}")
+            return 0
+        ctx.recon['_zap_ajax_running'] = True
+        deadline = time.monotonic() + timeout + 30
+        state = 'timeout'
+        results = 0
+        try:
+            while time.monotonic() < deadline:
+                await self.config.runtime_control.wait_if_paused()
+                if self.config.runtime_control.finish_requested:
+                    state = 'finalizacion_solicitada'
+                    break
+                status = await self._zap_api('ajaxSpider/view/status', timeout=10)
+                counter = await self._zap_api('ajaxSpider/view/numberOfResults', timeout=10)
+                with contextlib.suppress(TypeError, ValueError):
+                    results = int(counter.get('numberOfResults', results))
+                ctx.heartbeat('zap_ajax_spider', f'resultados={results}', results, 0)
+                if str(status.get('status', '')).lower() == 'stopped':
+                    state = 'completed'
+                    break
+                await asyncio.sleep(3)
+        finally:
+            if state != 'completed':
+                with contextlib.suppress(Exception):
+                    await self._zap_api('ajaxSpider/action/stop', timeout=5)
+            ctx.recon.pop('_zap_ajax_running', None)
+        # The AJAX spider stops itself at maxDuration; reaching it is a normal end.
+        stage['ajax_spider'] = {'state': state, 'results': results}
+        Console.ok(f"AJAX Spider ZAP finalizado: estado={state} resultados={results}")
+        return results
+
     async def _zap_wait_passive(self, ctx: ScanContext) -> int:
         Console.step("Espera de analisis pasivo ZAP iniciada")
         deadline = self._external_deadline(self.config.zap_passive_timeout)
@@ -3693,12 +4187,22 @@ class ExternalTools:
 
     async def _zap_active_scan(self, ctx: ScanContext, url: str) -> tuple[int, bool, int, str]:
         Console.step(f"Analisis activo ZAP iniciado -> {url}")
-        scan = await self._zap_api(
-            "ascan/action/scan",
-            {"url": url, "recurse": "true", "inScopeOnly": "true",
-             "contextId": ctx.recon.get('_zap_context_id')},
-            timeout=20,
-        )
+        context_id = ctx.recon.get('_zap_context_id')
+        params = {"recurse": "true", "inScopeOnly": "true", "contextId": context_id}
+        scan: dict[str, Any] = {}
+        if context_id:
+            # Scan every node of the same-origin context. Passing the target URL
+            # restricted the attack to its subtree (e.g. /app/login), leaving the
+            # spidered /api, /admin and sibling routes without active coverage.
+            try:
+                scan = await self._zap_api("ascan/action/scan", params, timeout=20)
+                ctx.recon['zap_active_scope'] = 'context'
+            except RuntimeError as exc:
+                Console.warn(f"ZAP rechazo el escaneo por contexto; se usa la URL objetivo: {clean_text(exc, 160)}")
+                scan = {}
+        if not str(scan.get('scan', scan.get('scanId', ''))).isdigit():
+            scan = await self._zap_api("ascan/action/scan", {**params, "url": url}, timeout=20)
+            ctx.recon['zap_active_scope'] = 'target_subtree'
         scan_id = str(scan.get('scan', scan.get('scanId', '')))
         if not scan_id.isdigit():
             raise RuntimeError('ZAP active scan did not return a valid scan ID')
@@ -4004,8 +4508,8 @@ class ExternalTools:
         values: list[str] = []
         seen: set[str] = set()
         rutas = list(ctx.wordlists.get("rutas", []))
-        if self.config.ffuf_max_words > 0:
-            rutas = rutas[: self.config.ffuf_max_words]
+        origin = self._origin_url(ctx.target.url)
+        already_probed = ctx.http.route_probed_urls
         for raw in smart + rutas:
             clean = str(raw or "").strip()
             if clean.startswith(("http://", "https://")):
@@ -4017,10 +4521,14 @@ class ExternalTools:
                 continue
             if len(clean) > 220:
                 continue
+            if urllib.parse.urljoin(origin, clean) in already_probed:
+                continue
             key = clean.lower()
             if key not in seen:
                 seen.add(key)
                 values.append(clean)
+                if self.config.ffuf_max_words > 0 and len(values) >= self.config.ffuf_max_words:
+                    break
         path = Path(tempfile.gettempdir()) / f"scan_titan_ffuf_{self._slug(ctx.target.display)}.txt"
         path.write_text("\n".join(values) + "\n", encoding="utf-8")
         return path
@@ -4552,6 +5060,12 @@ class ExternalTools:
         ctx.recon["ffuf_soft404_filtered_count"] = int(
             ctx.recon.get("ffuf_soft404_filtered_count", 0) or 0
         ) + soft404_filtered_count
+        # Record truncation explicitly: the returned count is usable routes only.
+        ctx.recon["ffuf_raw_results"] = raw_count
+        ctx.recon["ffuf_results_truncated"] = raw_count > self.MAX_FFUF_RECON_HITS
+        if ctx.recon["ffuf_results_truncated"]:
+            Console.warn(
+                f"FFUF devolvio {raw_count} resultados; se conservaron {self.MAX_FFUF_RECON_HITS} (limite de recon)")
         if hits:
             ctx.recon["wordlist_path_hits"] = list(
                 ctx.recon.get("wordlist_path_hits", []) + hits[: self.MAX_FFUF_RECON_HITS]
@@ -4695,6 +5209,8 @@ class ExternalTools:
                             f"proceso externo activo | {mode} | salida={output_bytes}b | "
                             f"sin_salida={idle_seconds:.0f}s"
                         )
+                        if Path(cmd[0]).stem.lower() == 'nuclei':
+                            detail += f" | peticiones={stream_stats['request_count']}"
                         last_output = clean_text(stream_stats.get("last_output", ""), 90)
                         if last_output:
                             detail = f"{detail} | ultimo={last_output}"
@@ -4767,7 +5283,11 @@ class ExternalTools:
                     last_line = chunk.decode(errors="replace").strip().splitlines()
                     if last_line:
                         stats["last_output"] = last_line[-1]
-                    for line in chunk.decode(errors='replace').splitlines():
+                    pending_key = f'_progress_pending_{channel}'
+                    pending = str(stats.get(pending_key, '')) + chunk.decode(errors='replace')
+                    lines = pending.split('\n')
+                    stats[pending_key] = lines.pop()[-16384:]
+                    for line in lines:
                         try:
                             progress = json.loads(line)
                             count = int(progress.get('requests', -1))
@@ -4923,6 +5443,7 @@ class ExternalTools:
         parts: list[str] = []
         for raw_part in cmd:
             part = str(raw_part)
+            part = re.sub(r"(?i)^(api\.key|apikey)=.*$", r"\1=[REDACTED]", part)
             if re.search(r"\s", part):
                 part = '"' + part.replace('"', '\\"') + '"'
             parts.append(part)
@@ -5166,10 +5687,29 @@ class ExternalTools:
             service_name = service.get("name", "?") if service is not None else "?"
             product = service.get("product", "") if service is not None else ""
             version = service.get("version", "") if service is not None else ""
+            if product and version:
+                ctx.recon.setdefault('component_observations', []).append({
+                    'name': product, 'version': version, 'url': ctx.target.url,
+                    'evidence': f'Nmap {profile}: {port_id}/{protocol} {product} {version}; '
+                                f'{service.get("extrainfo", "")}',
+                })
             ports.append(f"{port_id}/{protocol}")
             service_text = " ".join(item for item in [service_name, product, version] if item)
             services.append(service_text)
             ports_services.append(f"{port_id}/{protocol}: {service_text}")
+            if profile in {"network_vulnerability_scan", "udp_services"}:
+                service_meta = classify_service(
+                    port_id, protocol, service_name, product,
+                    service.get("tunnel", "") if service is not None else "",
+                )
+                if service_meta:
+                    findings.append(self._exposure_finding(
+                        ctx, port_id, protocol, service_text, "nmap:service-detection",
+                        f"{port_id}/{protocol} open: {service_text} "
+                        f"(method={service.get('method', '-') if service is not None else '-'}, "
+                        f"conf={service.get('conf', '-') if service is not None else '-'})",
+                        service_meta,
+                    ))
             for script in port.findall("script"):
                 output = script.get("output", "")
                 script_id = script.get("id", "script")
@@ -5177,6 +5717,11 @@ class ExternalTools:
                     script_notes.append(
                         f"{profile} {port_id}/{protocol} {script_id}: {clean_text(output, 350)}"
                     )
+                    exposure = classify_script(script_id, output)
+                    if exposure:
+                        findings.append(self._exposure_finding(
+                            ctx, port_id, protocol, service_text, f"nmap:{script_id}", output, exposure))
+                        continue
                     finding = self._nmap_script_finding(
                         ctx=ctx,
                         profile=profile,
@@ -5195,6 +5740,30 @@ class ExternalTools:
         ctx.recon["nmap_profiles"] = sorted(set(ctx.recon.get("nmap_profiles", []) + [profile]))
         Console.ok(f"Nmap parseado ({profile}): {len(ports)} puerto(s) abierto(s), {len(findings)} hallazgo(s)")
         return findings
+
+    def _exposure_finding(
+        self,
+        ctx: ScanContext,
+        port_id: str,
+        protocol: str,
+        service_text: str,
+        source: str,
+        evidence: str,
+        meta: dict[str, Any],
+    ) -> Finding:
+        """Build a service-exposure finding; the title omits the Nmap profile so
+        the same exposure observed by two profiles deduplicates to one finding."""
+        return Finding(
+            target=ctx.target.display,
+            category="External/Nmap",
+            title=f"{meta['title']} en {port_id}/{protocol}",
+            endpoint=f"{port_id}/{protocol}",
+            status=service_text,
+            evidence=clean_text(evidence, 1200),
+            source=source,
+            details="Clasificado por firma exacta de salida NSE o identificacion de servicio Nmap.",
+            **finding_kwargs(meta),
+        )
 
     def _nmap_script_finding(
         self,
@@ -5464,14 +6033,14 @@ class ExternalTools:
         """Return bounded, same-origin endpoints discovered before Nuclei runs."""
         candidates: list[Any] = [ctx.target.url, self._origin_url(ctx.target.url)]
         for key in (
-            "endpoints",
-            "raw_routes",
-            "discovered_paths",
-            "unauthenticated_routes",
             "login_forms",
             "forms",
+            "endpoints",
+            "unauthenticated_routes",
             "browser_routes",
             "browser_login_routes",
+            "raw_routes",
+            "discovered_paths",
             "exposed_files",
         ):
             candidates.extend(ctx.recon.get(key, []) or [])
@@ -5537,8 +6106,97 @@ class ExternalTools:
                     continue
         return resolved
 
+    def _nuclei_network_targets(self, ctx: ScanContext) -> list[str]:
+        """host:port inputs for every open TCP port Nmap identified.
+
+        Network/JavaScript templates (Redis, MongoDB, SMB, SSH, RDP, MySQL...)
+        target the input's port; a single https://host/ URL never reaches a
+        database or management service on another port.
+        """
+        host = getattr(ctx.target, "host", "") or getattr(ctx.target, "ip", "")
+        if not host:
+            return []
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        ports: set[int] = set()
+        for item in ctx.recon.get("open_ports", []) or []:
+            match = re.fullmatch(r"(\d{1,5})/tcp", str(item).strip())
+            if match and 1 <= int(match.group(1)) <= 65535:
+                ports.add(int(match.group(1)))
+        return [f"{host}:{port}" for port in sorted(ports)]
+
+    def _nuclei_param_urls(self, ctx: ScanContext) -> list[str]:
+        """Same-origin URLs with query parameters for Nuclei DAST fuzzing."""
+        candidates: list[Any] = [ctx.target.url]
+        for key in ("endpoints", "raw_routes", "discovered_paths", "unauthenticated_routes",
+                    "browser_routes", "forms", "katana_urls"):
+            candidates.extend(ctx.recon.get(key, []) or [])
+        urls: list[str] = []
+        seen: set[tuple[str, str, tuple[str, ...]]] = set()
+        for item in candidates:
+            raw = self._zap_url_from_recon_item(ctx, item)
+            if isinstance(item, dict):
+                raw = str(item.get("url") or item.get("action") or raw)
+            if not raw or "?" not in raw:
+                continue
+            normalized = self._zap_normalize_seed(ctx, raw)
+            if not normalized:
+                continue
+            parsed = urllib.parse.urlsplit(normalized)
+            names = tuple(sorted({name for name, _ in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)}))
+            if not names:
+                continue
+            # One URL per (path, parameter set) keeps fuzzing cost linear in the surface.
+            key = (parsed.netloc.lower(), parsed.path.lower(), names)
+            if key in seen:
+                continue
+            seen.add(key)
+            urls.append(urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path or "/", parsed.query, "")))
+            if len(urls) >= int(getattr(self.config, 'nuclei_dast_max_urls', 40)):
+                break
+        return urls
+
+    def _nuclei_templates_age_days(self) -> float | None:
+        bases = self._resolve_nuclei_template_dirs(".")
+        for base in bases:
+            for marker in ("templates-checksum.txt", ".checksum", ".templates-index"):
+                path = base / marker
+                with contextlib.suppress(OSError):
+                    if path.is_file():
+                        return (time.time() - path.stat().st_mtime) / 86400
+        return None
+
+    async def _ensure_nuclei_templates_fresh(self, binary: str, ctx: ScanContext) -> None:
+        """Update nuclei-templates once per execution when older than the limit."""
+        if not getattr(self.config, "nuclei_update_templates", False):
+            return
+        lock = getattr(self, "_nuclei_update_lock", None)
+        if lock is None:
+            lock = self._nuclei_update_lock = asyncio.Lock()
+        async with lock:
+            state = getattr(self, "_nuclei_update_state", None)
+            if state is None:
+                age = self._nuclei_templates_age_days()
+                limit = self.config.nuclei_templates_max_age_days
+                if age is not None and age < limit:
+                    state = {"state": "fresh", "age_days": round(age, 1)}
+                else:
+                    Console.step(f"Nuclei: actualizando plantillas (antiguedad={age if age is None else round(age, 1)} dias)")
+                    cmd = [binary, "-ut", "-silent", "-nc"]
+                    stdout, stderr, timed_out, returncode, duration = await self._run_command(cmd, 300)
+                    new_age = self._nuclei_templates_age_days()
+                    updated = returncode == 0 and not timed_out
+                    state = {"state": "updated" if updated else "update_failed",
+                             "age_days_before": None if age is None else round(age, 1),
+                             "age_days_after": None if new_age is None else round(new_age, 1),
+                             "returncode": returncode, "duration_seconds": round(duration, 1),
+                             "reason": "" if updated else clean_text(stderr or stdout, 240)}
+                    (Console.ok if updated else Console.warn)(f"Nuclei plantillas: {state['state']}")
+                self._nuclei_update_state = state
+            ctx.recon["nuclei_templates"] = dict(state)
+
     def _nuclei_cve_selector_args(self) -> list[str]:
-        template_dirs = self._resolve_nuclei_template_dirs("http/cves", "network/cves", "cves")
+        template_dirs = self._resolve_nuclei_template_dirs("http/cves", "network/cves", "javascript/cves", "cves")
         if template_dirs:
             args: list[str] = []
             for template_dir in template_dirs:
@@ -5566,7 +6224,12 @@ class ExternalTools:
             broad_list.write_text(broad_url + '\n', encoding='utf-8')
             broad_args = ['-l', str(broad_list)]
         common_flags = [*common_flags, '-duc', '-jsonl', '-stats-json']
-        return [
+        severity = getattr(self.config, 'nuclei_severity', 'low,medium,high,critical')
+        retries = str(getattr(self.config, 'nuclei_retries', 1))
+        request_timeout = str(getattr(self.config, 'nuclei_request_timeout', 10))
+        policy = getattr(self.config, 'policy', None)
+        brute_excluded = not bool(getattr(policy, 'allow_bruteforce', False))
+        profiles = [
             (
                 "vulnerability_scan",
                 [
@@ -5574,17 +6237,17 @@ class ExternalTools:
                     *common_flags,
                     *broad_args,
                     "-exclude-tags",
-                    "cve,cves,misconfig,exposure,headers,tech",
+                    "cve,cves,misconfig,exposure,headers,tech" + (",brute,bruteforce" if brute_excluded else ""),
                     "-severity",
-                    "low,medium,high,critical",
+                    severity,
                     "-rl",
                     "35",
                     "-c",
                     "10",
                     "-timeout",
-                    "12",
+                    request_timeout,
                     "-retries",
-                    "1",
+                    retries,
                     "-stats",
                     "-si",
                     "5",
@@ -5608,9 +6271,9 @@ class ExternalTools:
                     "-c",
                     "10",
                     "-timeout",
-                    "10",
+                    request_timeout,
                     "-retries",
-                    "1",
+                    retries,
                     "-stats",
                     "-jle",
                     str(conservative_output),
@@ -5625,15 +6288,15 @@ class ExternalTools:
                     *broad_args,
                     *cve_selector_args,
                     "-severity",
-                    "low,medium,high,critical",
+                    severity,
                     "-rl",
                     "50",
                     "-c",
                     "10",
                     "-timeout",
-                    "10",
+                    request_timeout,
                     "-retries",
-                    "1",
+                    retries,
                     "-stats",
                     "-jle",
                     str(cve_output),
@@ -5641,6 +6304,40 @@ class ExternalTools:
                 cve_output,
             ),
         ]
+        network_targets = self._nuclei_network_targets(ctx)
+        if network_targets:
+            network_list = target_list.with_name(target_list.stem + '_services.txt')
+            network_list.write_text("\n".join(network_targets) + "\n", encoding="utf-8")
+            network_output = self._external_report_path("nuclei", f"nuclei_out_{slug}_{stamp}_network.jsonl")
+            profiles.append((
+                "network_services_scan",
+                [
+                    binary, *common_flags, "-l", str(network_list),
+                    # Nuclei names network-protocol templates "tcp" in -pt.
+                    "-pt", "tcp,javascript,ssl",
+                    *(["-exclude-tags", "brute,bruteforce,dos"] if brute_excluded else ["-exclude-tags", "dos"]),
+                    "-severity", severity,
+                    "-rl", "35", "-c", "10", "-timeout", request_timeout, "-retries", retries,
+                    "-stats", "-jle", str(network_output),
+                ],
+                network_output,
+            ))
+        dast_urls = self._nuclei_param_urls(ctx)
+        if dast_urls:
+            dast_list = target_list.with_name(target_list.stem + '_dast.txt')
+            dast_list.write_text("\n".join(dast_urls) + "\n", encoding="utf-8")
+            dast_output = self._external_report_path("nuclei", f"nuclei_out_{slug}_{stamp}_dast.jsonl")
+            profiles.append((
+                "dast_scan",
+                [
+                    binary, *common_flags, "-l", str(dast_list), "-dast",
+                    "-severity", severity,
+                    "-rl", "25", "-c", "10", "-timeout", request_timeout, "-retries", retries,
+                    "-stats", "-jle", str(dast_output),
+                ],
+                dast_output,
+            ))
+        return profiles
 
     def _parse_nuclei(self, ctx: ScanContext, export_path: Path, stdout: str) -> list[Finding]:
         findings, _parser_error = self._parse_nuclei_with_status(ctx, export_path, stdout)
@@ -5709,6 +6406,10 @@ class ExternalTools:
                     title=f"Nuclei: {info.get('name') or item.get('template-id') or 'finding'}",
                     url=locations[0] if locations else item.get("host") or ctx.target.url,
                     endpoint=item.get("template-id", ""),
+                    # DAST results name the fuzzed parameter; it lets the
+                    # independent injection replay target the same input.
+                    param=str(item.get("fuzzing_parameter") or ""),
+                    method=str(item.get("fuzzing_method") or ""),
                     evidence=" | ".join(evidence_parts),
                     source=f"nuclei:{item.get('template-id', 'unknown')}",
                     confidence="medium",
@@ -6170,6 +6871,11 @@ class ScanTitan:
         self.reporter = ReportWriter(REPORTS_DIR, HISTORY_DIR)
         self.recon_matrix = ReconMatrixManager(RECON_FILE)
         self.external = ExternalTools(config)
+        self._external_lock = asyncio.Lock()
+        self._recon_lock = asyncio.Lock()
+        version_options = config.config_data.get('version_intelligence', {})
+        self.version_config = version_options if isinstance(version_options, dict) else {}
+        self.version_catalog = VersionCatalog(BASE_DIR / 'data' / 'version_catalog.json')
         self.evidence = EvidenceManager(
             REPORTS_DIR,
             enable_cards=config.policy.evidence_cards,
@@ -6199,8 +6905,7 @@ class ScanTitan:
         control_task = asyncio.create_task(self.config.runtime_control.keyboard_loop())
         resource_task: asyncio.Task[None] | None = None
         try:
-            self.telemetry.phase("cleanup", "limpieza de targets")
-            CleanupManager(self.config.targets_dir).run()
+            self.telemetry.phase("target_loading", "carga de targets sin limpieza implicita")
             targets = TargetLoader(self.config).load()
             if not targets:
                 Console.error(f"No se encontraron objetivos. Agregue targets en {self.config.targets_file}.")
@@ -6209,6 +6914,15 @@ class ScanTitan:
                 return 2
             audit_id = self.config.ensure_audit_id()
             self.telemetry.start(targets, self.config)
+            if self.version_config.get('enabled', True) and self.version_config.get('auto_update', False):
+                try:
+                    status = await self.version_catalog.refresh(
+                        days=max(1, int(self.version_config.get('refresh_days', 7))))
+                    Console.ok(f"Base de versiones: {status['sources']} fuentes locales, {status['updated']} actualizadas")
+                    for diagnostic in self.version_catalog.diagnostics:
+                        Console.warn(f"Base de versiones (se conserva cache): {diagnostic}")
+                except (OSError, ValueError) as exc:
+                    Console.warn(f"Actualizacion de versiones omitida; se usa base local: {exc}")
             resource_task = asyncio.create_task(self._resource_loop(), name="scan-titan-resource-monitor")
             Console.ok(f"Targets loaded: {len(targets)}")
             if audit_id:
@@ -6422,10 +7136,12 @@ class ScanTitan:
                     detail,
                     tested,
                     found,
+                    target.display,
                 ),
                 policy=self.config.policy,
             )
             ctx.sessions = sessions
+            ctx.injection_validator = InjectionValidator()
             ctx.recon['session_profiles'] = sessions.summary()
             web_probe = await http.request('GET', target.url, allow_redirects=False)
             if web_probe is None:
@@ -6450,6 +7166,9 @@ class ScanTitan:
                 try:
                     ctx.limits.max_tests_per_module = self.config.module_test_budget(module.name)
                     findings.extend(await self._run_module(module, ctx, self.config.module_timeout_for(module.name)))
+                    if module.name == 'recon_surface' and not self.config.skip_external:
+                        async with self._external_lock:
+                            await self.external.run_recon_extensions(ctx)
                 except Exception as exc:
                     Console.warn(f"Componente del pipeline fallido: {module_cls.__name__}: {exc}")
                 await asyncio.sleep(2.0)
@@ -6457,25 +7176,48 @@ class ScanTitan:
                 Console.warn(f"Herramientas externas omitidas por finalizacion ordenada en {target.display}")
             else:
                 await self.config.runtime_control.wait_if_paused()
-                external_findings = await self.external.run(ctx)
+                async with self._external_lock:
+                    external_findings = await self.external.run(ctx)
+                await ctx.injection_validator.validate_all(ctx, external_findings)
                 self._emit_new_findings(external_findings)
                 findings.extend(external_findings)
+            if (self.version_config.get('enabled', True) and not self.config.runtime_control.finish_requested
+                    and self.config.policy.module_enabled('component_versions')):
+                findings.extend(await self._run_module(VersionAuditor(self.version_catalog), ctx, 120))
 
+        recon['route_probe_cache'] = {
+            'unique_successful_urls': len(http.route_probed_urls),
+            'reused_responses': http.route_cache_hits,
+        }
+        Console.ok(
+            f"Rutas HTTP: {len(http.route_probed_urls)} consultas unicas | "
+            f"{http.route_cache_hits} respuestas reutilizadas"
+        )
         coverage_path = REPORTS_DIR / f"coverage_{self.reporter._slug(target.display)}_{datetime.now():%Y%m%d_%H%M%S}.json"
         coverage_path.parent.mkdir(parents=True, exist_ok=True)
         coverage = {key: value for key, value in recon.items() if key in {
             'session_profiles', 'session_lifecycle', 'role_audit', 'stored_xss_results', 'race_results',
             'race_candidates', 'websocket_results', 'ssh_audit', 'external_coverage',
             'service_access', 'smb_nse', 'ssrf_status', 'ssrf_note', 'rce_checks', 'http_availability',
-            'timeout_skips', 'module_errors', 'policy_deferred_tests',
+            'timeout_skips', 'module_errors', 'policy_deferred_tests', 'route_probe_cache',
+            'component_versions',
+            'injection_triage', 'javascript_recon',
         }}
         timestamp = now_text()
+        intelligence_path = REPORTS_DIR / f"recon_intelligence_{self.reporter._slug(target.display)}.json"
+        intelligence = {"target": target.display, "timestamp": timestamp,
+                        "javascript": recon.get("javascript_recon", {}),
+                        "injection_triage": recon.get("injection_triage", [])}
+        intelligence_tmp = intelligence_path.with_suffix('.tmp')
+        intelligence_tmp.write_text(json.dumps(intelligence, ensure_ascii=False, indent=2), encoding='utf-8')
+        intelligence_tmp.replace(intelligence_path)
         reportable_findings = correlate_findings(
             self._reportable_findings(findings),
             asset=target.ip or target.display,
         )
         self.scorer.apply(reportable_findings)
         incomplete = (self.config.runtime_control.finish_requested
+                      or any(item.get('state') == 'INCONCLUSIVE' for item in recon.get('injection_triage', []))
                       or bool(recon.get('timeout_skips'))
                       or bool(recon.get('module_errors'))
                       or any(item.get('state') != 'completed' for item in recon.get('external_coverage', []))
@@ -6506,22 +7248,23 @@ class ScanTitan:
             f"Actualizacion compacta de Recon Matrix iniciada: objetivo={target.display} rutas_raw={len(recon_hits)}"
         )
         self.telemetry.phase("recon_matrix", f"Compact update for {target.display}")
-        recon_task = asyncio.create_task(
-            asyncio.to_thread(
-                self.recon_matrix.update_target_bundle,
-                self._recon_row(target, recon, timestamp),
-                target.display,
-                recon_hits,
-                timestamp,
+        async with self._recon_lock:
+            recon_task = asyncio.create_task(
+                asyncio.to_thread(
+                    self.recon_matrix.update_target_bundle,
+                    self._recon_row(target, recon, timestamp),
+                    target.display,
+                    recon_hits,
+                    timestamp,
+                )
             )
-        )
-        while not recon_task.done():
-            done, _pending = await asyncio.wait({recon_task}, timeout=5.0)
-            if recon_task in done:
-                break
-            Console.heartbeat("recon_matrix", "compacting and saving", 0, 0)
-            self.telemetry.heartbeat("recon_matrix", "compacting and saving", 0, 0)
-        recon_stats = await recon_task
+            while not recon_task.done():
+                done, _pending = await asyncio.wait({recon_task}, timeout=5.0)
+                if recon_task in done:
+                    break
+                Console.heartbeat("recon_matrix", "compacting and saving", 0, 0)
+                self.telemetry.heartbeat("recon_matrix", "compacting and saving", 0, 0)
+            recon_stats = await recon_task
         Console.ok(
             "Recon Matrix updated once: "
             f"kept={recon_stats['kept']} discarded/duplicate={recon_stats['discarded']}"
@@ -6540,7 +7283,10 @@ class ScanTitan:
     def _reportable_findings(self, findings: list[Finding]) -> list[Finding]:
         min_rank = SEVERITY_ORDER.get(self.config.report_min_severity, SEVERITY_ORDER["Low"])
         reportable: list[Finding] = []
+        decisions = load_decisions()
         for finding in findings:
+            if is_discarded(finding, decisions):
+                continue
             severity = normalize_severity(finding.severity)
             if SEVERITY_ORDER.get(severity, 99) > min_rank:
                 continue
@@ -6591,9 +7337,10 @@ class ScanTitan:
             Console.warn("Detalle tecnico maestro omitido: no hay hallazgos elegibles o la plantilla no esta disponible")
         return output_path
 
-    def _heartbeat(self, module: str, detail: str, tested: int, found: int) -> None:
+    def _heartbeat(self, module: str, detail: str, tested: int, found: int,
+                   target: str | None = None) -> None:
         Console.heartbeat(module, detail, tested, found)
-        self.telemetry.heartbeat(module, detail, tested, found)
+        self.telemetry.heartbeat(module, detail, tested, found, target=target)
 
     async def _module_pulse(self, module: str, ctx: ScanContext) -> None:
         started = time.monotonic()
@@ -6615,7 +7362,10 @@ class ScanTitan:
                 f"ultima respuesta hace {stats['seconds_without_response']:.0f}s"
             )
             Console.step(f"{module}: {detail}")
-            self.telemetry.module_activity(module, detail, stats)
+            self.telemetry.module_activity(
+                module, detail, stats,
+                target=getattr(getattr(ctx, 'target', None), 'display', None),
+            )
 
     async def _run_module(self, module: Any, ctx: ScanContext, timeout: int) -> list[Finding]:
         Console.phase(f"MODULE: {module.name}")
@@ -6633,15 +7383,19 @@ class ScanTitan:
         try:
             await self.config.runtime_control.wait_if_paused()
             if self.config.runtime_control.finish_requested:
-                self.telemetry.module_end(module.name, [], "skipped", "Finalizacion controlada solicitada")
+                self.telemetry.module_end(module.name, [], "skipped", "Finalizacion controlada solicitada",
+                                          target=ctx.target.display)
                 return []
             findings = await asyncio.wait_for(
                 module.run(ctx),
                 timeout=max(1, int(timeout or 1)),
             )
+            if not hasattr(ctx, 'injection_validator'):
+                ctx.injection_validator = InjectionValidator()
+            await ctx.injection_validator.validate_all(ctx, findings)
             self._emit_new_findings(findings)
             status = "skipped" if self.config.runtime_control.finish_requested else "finished"
-            self.telemetry.module_end(module.name, findings, status)
+            self.telemetry.module_end(module.name, findings, status, target=ctx.target.display)
             Console.ok(f"{module.name}: {len(findings)} hallazgo(s) en {time.monotonic() - started:.1f}s")
             return findings
         except asyncio.TimeoutError:
@@ -6656,7 +7410,8 @@ class ScanTitan:
                     }
                 )
             if not self.config.include_pipeline_findings:
-                self.telemetry.module_end(module.name, [], "timeout", f"Timeout despues de {timeout}s")
+                self.telemetry.module_end(module.name, [], "timeout", f"Timeout despues de {timeout}s",
+                                          target=ctx.target.display)
                 return []
             timeout_findings = [
                 Finding(
@@ -6670,7 +7425,8 @@ class ScanTitan:
                     confidence="high",
                 )
             ]
-            self.telemetry.module_end(module.name, timeout_findings, "timeout", f"Timeout despues de {timeout}s")
+            self.telemetry.module_end(module.name, timeout_findings, "timeout", f"Timeout despues de {timeout}s",
+                                      target=ctx.target.display)
             return timeout_findings
         except Exception as exc:
             Console.warn(f"{module.name}: {exc}")
@@ -6687,7 +7443,8 @@ class ScanTitan:
                     confidence="high",
                 )
             ]
-            self.telemetry.module_end(module.name, failed_findings, "failed", str(exc))
+            self.telemetry.module_end(module.name, failed_findings, "failed", str(exc),
+                                      target=ctx.target.display)
             return failed_findings
         finally:
             pulse_task.cancel()
@@ -6738,6 +7495,13 @@ class ScanTitan:
             services = list(services) + [f"TLS Protocols: {', '.join(recon.get('tls_supported_protocols', []))}"]
         if recon.get("zap_alerts"):
             services = list(services) + [f"ZAP Alerts: {clean_text(recon.get('zap_alerts'), 1800)}"]
+        for item in recon.get('httpx_metadata', []):
+            if isinstance(item, dict):
+                services = list(services) + [
+                    f"httpx: HTTP {item.get('status_code', '-')} | "
+                    f"servidor={clean_text(item.get('webserver', ''), 100)} | "
+                    f"titulo={clean_text(item.get('title', ''), 100)}"
+                ]
         return {
             "Target": target.display,
             "IP": target.ip,
@@ -6909,7 +7673,8 @@ def build_argparser() -> argparse.ArgumentParser:
     parser.add_argument("--delay", type=float, help="Delay base entre peticiones HTTP")
     parser.add_argument("--module-timeout", type=int, help="Timeout estricto por modulo en segundos")
     parser.add_argument("--nmap-timeout", type=int, help="Timeout estricto de Nmap en segundos")
-    parser.add_argument("--nuclei-timeout", type=int, help="Timeout estricto de Nuclei en segundos")
+    parser.add_argument("--nuclei-timeout", type=int,
+                        help="Limite total opcional de Nuclei en segundos (0=sin limite; vigilante de progreso activo)")
     parser.add_argument("--verify-tls", action="store_true", help="Verificar certificados TLS")
     parser.add_argument("--skip-external", action="store_true", help="Omitir todos los motores externos")
     parser.add_argument("--allow-cloud-ssrf", action="store_true", help="Habilitar pruebas SSRF contra metadata cloud")
@@ -6953,6 +7718,8 @@ async def async_main(argv: list[str] | None = None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Help/version/argument errors must not initialize an event loop or campaign.
+    build_argparser().parse_args(argv)
     try:
         return asyncio.run(async_main(argv))
     except KeyboardInterrupt:

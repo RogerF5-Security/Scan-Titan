@@ -24,8 +24,10 @@ class ExternalUpgradeTests(unittest.IsolatedAsyncioTestCase):
             tool = external_tools(zap_max_alerts=250)
             ctx = self.context()
             ctx.recon['_zap_export_path'] = str(Path(tmp) / 'zap.json')
+            # Pages are requested per risk level, High (3) first.
             pages = [{'alerts': [{'id': str(i)} for i in range(100)]},
-                     {'alerts': [{'id': str(i)} for i in range(100, 103)]}]
+                     {'alerts': [{'id': str(i)} for i in range(100, 103)]},
+                     {'alerts': []}, {'alerts': []}, {'alerts': []}]
             tool._zap_api = AsyncMock(side_effect=pages)
             result = await tool._zap_checkpoint(ctx, 'running')
             saved = json.loads(Path(ctx.recon['_zap_export_path']).read_text())
@@ -33,6 +35,8 @@ class ExternalUpgradeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(saved['alerts']), 103)
             self.assertEqual(saved['state'], 'running')
             self.assertEqual(tool._zap_api.call_args_list[1].args[1]['start'], '100')
+            self.assertEqual(tool._zap_api.call_args_list[0].args[1]['riskId'], '3')
+            self.assertEqual(tool._zap_api.call_args_list[2].args[1]['riskId'], '2')
             self.assertFalse(ctx.recon['zap_alerts_capped'])
 
     async def test_zap_stalled_scan_stops_only_owned_id_and_keeps_alerts(self):
@@ -53,7 +57,7 @@ class ExternalUpgradeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_zap_failed_stage_recovers_alerts(self):
         with tempfile.TemporaryDirectory() as tmp:
-            tool = external_tools(zap_mode='active', zap_api_url='http://127.0.0.1:1',
+            tool = external_tools(zap_mode='active', zap_api_url='http://127.0.0.1:1', zap_api_key='fixture-key',
                                   policy=SimpleNamespace(allow_state_changing_api_tests=True),
                                   zap_shutdown_after_scan=True, zap_start_daemon=False, zap_startup_timeout=1, telemetry=None,
                                   runtime_control=RuntimeControl(), external_reports_dir=Path(tmp))

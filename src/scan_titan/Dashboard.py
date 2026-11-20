@@ -16,6 +16,10 @@ import pandas as pd
 import yaml
 
 from quality_rules import finding_quality_exclusion
+from finding_triage import injection_family, load_decisions, triage_key
+from daily_ui import enhance_daily_html, intelligence_model
+from modules.injection_validation import replay_command, without_parameter
+from urllib.parse import parse_qsl, urlsplit
 
 try:
     from openpyxl import load_workbook
@@ -53,8 +57,8 @@ except Exception:
         return "" if value is None else str(value)
 
 
-DASHBOARD_VERSION = "22.3.0-community"
-SCANNER_FALLBACK = "TITAN v22.3.0 COMMUNITY ZERO-TOUCH"
+DASHBOARD_VERSION = "22.5.0-community"
+SCANNER_FALLBACK = "TITAN v22.5.0 COMMUNITY ZERO-TOUCH"
 BASE_DIR = Path(os.environ.get("SCAN_TITAN_BASE_DIR", Path(__file__).resolve().parents[2])).resolve()
 REPORTS_DIR = Path(os.environ.get("SCAN_TITAN_REPORTS_DIR", BASE_DIR / "reports")).resolve()
 CONFIG_FILE = Path(os.environ.get("SCAN_TITAN_CONFIG_FILE", BASE_DIR / "config" / "config.yaml")).resolve()
@@ -70,7 +74,7 @@ REPORT_COLUMNS = [
     "Categoria", "URL", "Endpoint", "Param", "Method", "Payload", "HTTP", "Evidence",
     "Manual_Command", "Sources", "Confidence", "Evidence_Strength", "False_Positive_Risk",
     "CWE", "OWASP", "CVSS", "Impact", "Remediation", "Recommendation", "Evidence_Artifact",
-    "Console_Artifact", "Browser_Artifact", "Affected_Locations",
+    "Console_Artifact", "Browser_Artifact", "Affected_Locations", "Validation",
 ]
 RECON_FILE = Path(os.environ.get("SCAN_TITAN_RECON_FILE", REPORTS_DIR / "Recon_Matrix.xlsx")).resolve()
 
@@ -281,6 +285,7 @@ def parsear_reporte_json(filepath: str) -> list[dict[str, Any]]:
             "Evidence_Artifact": _text(finding.get("evidence_artifact")), "Console_Artifact": _text(finding.get("console_artifact")),
             "Browser_Artifact": _text(finding.get("browser_artifact")),
             "Affected_Locations": _list_text(finding.get("affected_locations")),
+            "Validation": finding.get('validation') or {},
         })
         parsed.append(record)
     return parsed
@@ -424,15 +429,17 @@ def _record_from_state(record: dict[str, Any], latest: dict[str, Any], cutoff: s
     evidence_strength = _text(record.get("evidence_strength") or latest.get("Evidence_Strength") or "unknown").lower()
     fp_risk = _text(record.get("false_positive_risk") or latest.get("False_Positive_Risk") or "unknown").lower()
     title = _display_es(record.get("title") or latest.get("Titulo") or "Hallazgo sin titulo")
-    candidate = "potential cve" in title.lower() or "inferred from service version" in title.lower() or fp_risk == "high"
+    candidate = ("potential cve" in title.lower() or "inferred from service version" in title.lower()
+                 or fp_risk == "high" or record.get('source') == 'version_intelligence'
+                 or 'version_intelligence' in (record.get('correlated_sources') or []))
     row: dict[str, Any] = {
         "id": _text(record.get("canonical_id") or latest.get("Vuln_ID")), "fingerprint": _text(record.get("fingerprint")),
         "target": _text(record.get("target") or latest.get("Target")), "asset": _text(record.get("asset") or latest.get("Asset")),
         "severity": severity, "status": status, "state": state,
         "quality": "INFORMATIONAL" if severity == "INFO" else ("CANDIDATE" if candidate else "VALIDATED"),
         "title": title, "category": category_label_es(record.get("category") or latest.get("Categoria") or "Desconocida"),
-        "url": _text(record.get("last_url") or latest.get("URL")), "endpoint": _text(latest.get("Endpoint")),
-        "param": _text(latest.get("Param")), "method": _text(latest.get("Method")), "payload": _text(latest.get("Payload")),
+        "url": _text(record.get("last_url") or latest.get("URL")), "endpoint": _text(record.get("endpoint") or latest.get("Endpoint")),
+        "param": _text(record.get("param") or latest.get("Param")), "method": _text(record.get("method") or latest.get("Method")), "payload": _text(latest.get("Payload")),
         "http": _text(latest.get("HTTP")), "evidence": _display_es(record.get("last_evidence") or latest.get("Evidence")),
         "manual_command": _text(record.get("manual_command") or latest.get("Manual_Command")),
         "sources": _list_text(record.get("correlated_sources") or latest.get("Sources")),
@@ -453,6 +460,17 @@ def _record_from_state(record: dict[str, Any], latest: dict[str, Any], cutoff: s
     row["console_href"] = _artifact_href(row["console_artifact"])
     row["browser_href"] = _artifact_href(row["browser_artifact"])
     row["risk"] = _risk_score(row)
+    row['validation'] = record.get('validation') or {}
+    if not isinstance(row['validation'], dict):
+        row['validation'] = {}
+    if injection_family(record):
+        query_names = {name for name, _ in parse_qsl(urlsplit(row['url']).query, keep_blank_values=True)}
+        if not row['param'] and len(query_names) == 1:
+            row['param'] = next(iter(query_names))
+        if (row['method'] or 'GET').upper() == 'GET' and row['param'] in query_names:
+            requests = row['validation'].get('requests') or {'baseline_url': without_parameter(row['url'], row['param']), 'probe_url': row['url']}
+            row['manual_command'] = replay_command(requests, row['validation'].get('reason', 'alerta historica pendiente de validacion diferencial'))
+    row['triage_key'] = triage_key({**record, 'url': row['url'], 'param': row['param'], 'method': row['method']})
     return row
 
 
@@ -470,8 +488,12 @@ def _fallback_rows(df: pd.DataFrame, cutoff: str) -> list[dict[str, Any]]:
                      "correlated_sources": item.get("Sources"), "cwe": item.get("CWE"), "owasp": item.get("OWASP"),
                      "cvss": item.get("CVSS"), "impact": item.get("Impact"), "remediation": item.get("Remediation"),
                      "recommendation": item.get("Recommendation"), "evidence_artifact": item.get("Evidence_Artifact"),
-                     "console_artifact": item.get("Console_Artifact"), "browser_artifact": item.get("Browser_Artifact")}
-        rows.append(_record_from_state(synthetic, item, cutoff))
+                     "console_artifact": item.get("Console_Artifact"), "browser_artifact": item.get("Browser_Artifact"),
+                     "validation": item.get("Validation") or {}}
+        row = _record_from_state(synthetic, item, cutoff)
+        if finding_quality_exclusion(synthetic):
+            row.update(state='PENDING', status='PENDING', quality='CANDIDATE')
+        rows.append(row)
     return rows
 
 
@@ -631,7 +653,20 @@ def construir_modelo(df: pd.DataFrame) -> dict[str, Any]:
             if not isinstance(record, dict) or not _text(record.get("canonical_id")):
                 continue
             key = (_text(record.get("asset") or record.get("target")), _text(record.get("canonical_id")))
-            rows.append(_record_from_state(record, latest_by_key.get(key, {}), cutoff))
+            row = _record_from_state(record, latest_by_key.get(key, {}), cutoff)
+            exclusion = finding_quality_exclusion(record)
+            if exclusion:
+                row.update(state='PENDING', status='PENDING', quality='CANDIDATE')
+            elif injection_family(record):
+                row['quality'] = 'VALIDATED'
+            else:
+                row['quality'] = 'OBSERVED'
+            rows.append(row)
+    decisions = load_decisions()
+    for row in rows:
+        if not row.get('triage_key'):
+            row['triage_key'] = triage_key(row)
+        row['analyst_discarded'] = decisions.get(row['triage_key'], {}).get('decision') == 'discarded'
     default_criticality, asset_criticality = _asset_criticality_config()
     criticality_factors = {"bajo": .90, "low": .90, "medio": 1.0, "medium": 1.0, "alto": 1.10, "high": 1.10, "critico": 1.20, "crítico": 1.20, "critical": 1.20}
     for row in rows:
@@ -640,7 +675,7 @@ def construir_modelo(df: pd.DataFrame) -> dict[str, Any]:
         row["asset_criticality_factor"] = criticality_factors.get(label.lower(), 1.0)
         row["risk"] = _risk_score(row)
     rows.sort(key=lambda row: (SEVERITY_RANK.get(row["severity"], 99), -row["risk"], row["target"], row["title"]))
-    active, not_seen = [row for row in rows if row["state"] == "ACTIVE"], [row for row in rows if row["state"] == "NOT_SEEN"]
+    active, not_seen = [row for row in rows if row["state"] == "ACTIVE" and not row["analyst_discarded"]], [row for row in rows if row["state"] == "NOT_SEEN" and not row["analyst_discarded"]]
     new_rows, regressions = [row for row in active if row["status"] == "NEW"], [row for row in active if row["status"] == "REGRESSION"]
     newly_not_seen = [row for row in not_seen if row["state_changed_at"][:10] == cutoff]
     exact_delta = bool(state_records is not None and any(row["state_changed_at"] for row in rows))
@@ -689,7 +724,11 @@ def construir_modelo(df: pd.DataFrame) -> dict[str, Any]:
                      "tools": tool_health, "summary": summary,
                      "risk_formula": "CVSS × confianza × fuerza de evidencia × riesgo de falso positivo × exposición × recurrencia × criticidad del activo"},
             "rows": rows, "history": history, "assets": assets,
+            "active_snapshot": [{"date": cutoff, "total": len(active),
+                                 **{s: severity_counts.get(s, 0) for s in SEVERITY_ORDER}}],
             "recon": recon,
+            "triage": load_decisions(),
+            "intelligence": intelligence_model(Path(CARPETA_REPORTES)),
             "priority": sorted(active, key=lambda row: (-row["risk"], SEVERITY_RANK.get(row["severity"], 99)))[:8]}
 
 
@@ -699,7 +738,7 @@ HTML_TEMPLATE = r'''<!doctype html><html lang="es"><head><meta charset="utf-8"><
 @media(max-width:1180px){.kpis{grid-template-columns:repeat(3,1fr)}.queue{grid-template-columns:repeat(2,1fr)}.toolbar{grid-template-columns:repeat(3,1fr)}.toolbar .search{grid-column:span 2}.ops-grid{grid-template-columns:1fr}}@media(max-width:780px){.shell{padding:0 14px 30px}.topbar-inner{padding:12px 14px}.brand p,.top-actions .optional{display:none}.hero{grid-template-columns:1fr}.hero h2{font-size:23px}.kpis{grid-template-columns:repeat(2,1fr)}.grid-2{grid-template-columns:1fr}.queue{grid-template-columns:1fr}.toolbar{grid-template-columns:1fr 1fr}.toolbar .search{grid-column:1/-1}.detail-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:480px){.toolbar{grid-template-columns:1fr}.toolbar .search{grid-column:auto}.detail-grid{grid-template-columns:1fr}.kpi-value{font-size:25px}}@media print{body{background:#fff;color:#111}.topbar,.toolbar,.view-tabs,.top-actions,.btn,.pager{display:none!important}.shell{width:100%;padding:0}.panel{box-shadow:none;border:1px solid #bbb;background:#fff}.findings-table{min-width:0;font-size:10px}}
 </style><style>.recon-toolbar{padding:15px 18px;border-bottom:1px solid var(--line)}.recon-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.recon-card{background:#091522;border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}.recon-card h4{margin:0 0 6px;font-size:15px}.recon-meta{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}.recon-section{margin-top:10px}.recon-section strong{display:block;color:var(--blue);font-size:11px;text-transform:uppercase;margin-bottom:5px}.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{display:inline-flex;align-items:center;max-width:520px;padding:4px 7px;border:1px solid #31516f;background:#10243a;color:#d8ecff;border-radius:7px;line-height:1.25;overflow-wrap:anywhere}.hit-table{width:100%;min-width:980px;border-collapse:collapse}.hit-table th{font-size:10px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px;background:#091522;border-bottom:1px solid var(--line)}.hit-table td{padding:10px;border-bottom:1px solid rgba(36,55,80,.65);vertical-align:top}.status-200{color:var(--green)}.status-301,.status-302{color:var(--blue)}.status-403{color:var(--yellow)}.status-500{color:var(--red)}@media(max-width:980px){.recon-grid{grid-template-columns:1fr}}</style></head><body><header class="topbar"><div class="topbar-inner"><div class="brand"><div class="brand-mark">ST</div><div><h1>Scan Titan</h1><p>Centro operativo de vulnerabilidades</p></div></div><div class="top-actions"><button class="btn ghost optional" id="printBtn">Imprimir</button><button class="btn primary" id="exportBtn">Exportar CSV</button></div></div></header><main class="shell">
 <section class="hero"><article class="panel hero-main"><div class="eyebrow">Resumen ejecutivo verificable</div><h2>Postura de vulnerabilidades</h2><p class="summary" id="summary"></p><div class="meta-line"><span id="scanner"></span><span id="cutoff"></span><span id="generated"></span></div></article><aside class="panel snapshot" id="snapshotCard"><div class="status-line"><span class="dot"></span><span id="snapshotStatus"></span></div><dl><dt>Fuente</dt><dd id="stateSource"></dd><dt>Runtime</dt><dd id="runtimeStatus"></dd><dt>Cobertura</dt><dd id="coverage"></dd><dt>Versión</dt><dd id="version"></dd></dl></aside></section><div class="alert" id="runtimeAlert"></div><section class="kpis" id="kpis"></section>
-<section class="grid-2"><article class="panel"><header class="panel-head"><h3>Hallazgos observados por ejecución</h3><span class="muted">Observaciones únicas por día</span></header><div class="panel-body"><div class="history-bars" id="history"></div><div class="legend" id="legend"></div></div></article><article class="panel"><header class="panel-head"><h3>Exposición por activo</h3><span class="muted">Riesgo combinado 0–100</span></header><div class="panel-body"><div class="asset-list" id="assets"></div><div class="formula" id="riskFormula"></div></div></article></section>
+<section class="grid-2"><article class="panel"><header class="panel-head"><h3>Conteo de hallazgos</h3><select class="control" id="historyMetric" aria-label="Tipo de conteo" style="width:auto;max-width:60%"><option value="active">Vigentes al corte</option><option value="observed">Observados por día</option></select></header><div class="panel-body"><p class="muted" id="historyNote"></p><div class="history-bars" id="history"></div><div class="legend" id="legend"></div></div></article><article class="panel"><header class="panel-head"><h3>Exposición por activo</h3><span class="muted">Riesgo combinado 0–100</span></header><div class="panel-body"><div class="asset-list" id="assets"></div><div class="formula" id="riskFormula"></div></div></article></section>
 <section class="panel operations"><header class="panel-head"><h3>Cola priorizada de validación y remediación</h3><span class="muted">Mayor riesgo verificable primero</span></header><div class="panel-body"><div class="queue" id="priority"></div></div></section>
 <section class="panel operations"><header class="panel-head"><h3>Salud del escaneo</h3><span class="muted">Cobertura, degradaciones y trazabilidad</span></header><div class="panel-body ops-grid"><div><div class="health-row" id="toolHealth"></div><ul class="warning-list" id="toolWarnings"></ul></div><div><div class="detail-content" id="runtimeDetail"></div><div class="detail-actions"><a class="btn small" href="Recon_Dashboard.html">Abrir Recon Dashboard</a><a class="btn small" href="scan_titan_runtime.json">Abrir runtime JSON</a></div></div></div></section>
 <section class="panel operations"><header class="panel-head"><h3>Reconocimiento por target</h3><span class="muted" id="reconScope">Inventario separado de vulnerabilidades</span></header><div class="view-tabs" id="reconTabs"><button class="tab active" data-recon-view="targets">Superficie</button><button class="tab" data-recon-view="hits">Rutas Wordlist</button></div><div class="recon-toolbar"><input class="control search" id="reconSearch" type="search" placeholder="Buscar target, IP, tecnología, ruta, WAF o header…"></div><div class="panel-body" id="reconBody"></div></section>
@@ -708,7 +747,7 @@ HTML_TEMPLATE = r'''<!doctype html><html lang="es"><head><meta charset="utf-8"><
 <script>(()=>{'use strict';const data=JSON.parse(document.getElementById('dashboardData').textContent),meta=data.meta,severityRank={CRITICAL:0,HIGH:1,MEDIUM:2,LOW:3,INFO:4},state={view:'ACTIVE',query:'',severity:'',target:'',confidence:'',source:'',sort:'risk',direction:-1,page:1,pageSize:25,filtered:[],retest:new Set()},$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),statusLabel=v=>({NEW:'NUEVO',RECURRING:'RECURRENTE',REGRESSION:'REGRESIÓN',NOT_SEEN:'NO VISTO'}[v]||v),severityLabel=v=>({CRITICAL:'CRÍTICA',HIGH:'ALTA',MEDIUM:'MEDIA',LOW:'BAJA',INFO:'INFO'}[v]||v),fmt=v=>v?v.replace('T',' ').slice(0,19):'N/D',badge=(t,c)=>`<span class="badge ${c}">${esc(t)}</span>`;let toastTimer;try{state.retest=new Set(JSON.parse(localStorage.getItem('scanTitanRetestQueueV20.2')||'[]'))}catch(_){}function toast(m){const n=$('toast');n.textContent=m;n.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>n.classList.remove('show'),1800)}async function copyText(t){try{await navigator.clipboard.writeText(t)}catch(_){const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();document.execCommand('copy');a.remove()}toast('Copiado al portapapeles')}const retestKey=(id,asset)=>`${asset}|${id}`;function toggleRetest(id,asset){const key=retestKey(id,asset);if(state.retest.has(key)){state.retest.delete(key);toast('Retirado de la cola de retest')}else{state.retest.add(key);toast('Agregado a la cola de retest')}try{localStorage.setItem('scanTitanRetestQueueV20.2',JSON.stringify([...state.retest]))}catch(_){}render()}
 $('summary').textContent=meta.summary;$('scanner').textContent=`Scanner: ${meta.scanner}`;$('cutoff').textContent=`Corte: ${fmt(meta.cutoff)}`;$('generated').textContent=`Generado: ${fmt(meta.generated_at)}`;$('snapshotStatus').textContent=({FINAL:'SNAPSHOT FINAL',PROVISIONAL:'SNAPSHOT PROVISIONAL',HISTORICAL_FALLBACK:'FALLBACK HISTÓRICO'}[meta.snapshot_status]||meta.snapshot_status);$('snapshotCard').classList.add(`status-${meta.snapshot_status}`);$('stateSource').textContent=meta.state_source;$('runtimeStatus').textContent=`${meta.runtime.status||'unknown'} · ${meta.runtime.phase||'sin fase'}`;$('coverage').textContent=meta.runtime.target_total?`${meta.runtime.targets_completed}/${meta.runtime.target_total} targets · ${meta.runtime.percent}%`:'N/D';$('version').textContent=`Dashboard ${meta.dashboard_version}`;if(meta.snapshot_status==='PROVISIONAL'||meta.runtime.warning||meta.runtime.error){const p=[];if(meta.snapshot_status==='PROVISIONAL')p.push('El escaneo no había finalizado al generar este corte.');if(meta.runtime.warning)p.push(`Advertencia: ${meta.runtime.warning}`);if(meta.runtime.error)p.push(`Error: ${meta.runtime.error}`);$('runtimeAlert').textContent=p.join(' ');$('runtimeAlert').classList.add('show')}
 const delta=meta.exact_delta?(meta.change_net>0?`+${meta.change_net}`:String(meta.change_net)):'N/D',kpis=[['Hallazgos activos',meta.active,'Vigentes en el estado actual','tone-blue'],['Alta / crítica',meta.high_critical,'Prioridad inmediata','tone-red'],['Nuevos',meta.new,'Primer hallazgo en este corte','tone-green'],['Regresiones',meta.regressions,'Reaparecieron tras no verse','tone-red'],['No vistos',meta.not_seen,'Histórico conservado','tone-orange'],['Cambio neto',delta,meta.exact_delta?'Nuevos + regresiones − no vistos':'Disponible desde transición v20.2','tone-blue']];$('kpis').innerHTML=kpis.map(k=>`<article class="panel kpi"><div class="kpi-label">${esc(k[0])}</div><div class="kpi-value ${k[3]}">${esc(k[1])}</div><div class="kpi-note">${esc(k[2])}</div></article>`).join('');
-const maxH=Math.max(1,...data.history.map(i=>i.total));$('history').innerHTML=data.history.length?data.history.map(i=>{const totalH=Math.max(3,i.total/maxH*190),segments=['INFO','LOW','MEDIUM','HIGH','CRITICAL'].map(s=>`<span class="bar-segment sev-${s}" style="height:${i.total?i[s]/i.total*totalH:0}px" title="${severityLabel(s)}: ${i[s]}"></span>`).join('');return `<div class="history-col"><span class="bar-total">${i.total}</span><div class="bar-stack" style="height:${totalH}px">${segments}</div><span class="bar-label">${esc(i.date.slice(5))}</span></div>`}).join(''):'<div class="empty">Sin histórico disponible</div>';$('legend').innerHTML=['CRITICAL','HIGH','MEDIUM','LOW','INFO'].map(s=>`<span><i class="sev-${s}"></i>${severityLabel(s)}: ${meta.severity[s]||0}</span>`).join('');$('assets').innerHTML=data.assets.length?data.assets.slice(0,10).map(i=>`<div class="asset-row"><span class="asset-name" title="${esc(i.target)}">${esc(i.target)}</span><div class="risk-track"><div class="risk-fill" style="width:${i.risk}%"></div></div><span class="risk-value">${i.risk}</span></div>`).join(''):'<div class="empty">Sin activos vulnerables</div>';$('riskFormula').textContent=`Fórmula: ${meta.risk_formula}. La exposición combina la probabilidad de al menos un hallazgo material.`;
+function renderHistory(){const activeMode=$('historyMetric').value==='active',series=activeMode?data.active_snapshot:data.history,counts=activeMode?meta.severity:series.reduce((a,r)=>{for(const s of Object.keys(severityRank))a[s]=(a[s]||0)+(r[s]||0);return a},{});$('historyNote').textContent=activeMode?`${meta.active} vigentes en el estado local. Coincide con el resumen de consola.`:'Cada barra cuenta solo hallazgos observados ese día; no representa el total vigente.';const maxH=Math.max(1,...series.map(i=>i.total));$('history').innerHTML=series.length?series.map(i=>{const totalH=Math.max(3,i.total/maxH*190),segments=['INFO','LOW','MEDIUM','HIGH','CRITICAL'].map(s=>`<span class="bar-segment sev-${s}" style="height:${i.total?i[s]/i.total*totalH:0}px" title="${severityLabel(s)}: ${i[s]}"></span>`).join('');return `<div class="history-col"><span class="bar-total">${i.total}</span><div class="bar-stack" style="height:${totalH}px">${segments}</div><span class="bar-label">${esc(i.date.slice(5))}</span></div>`}).join(''):'<div class="empty">Sin histórico disponible</div>';$('legend').innerHTML=['CRITICAL','HIGH','MEDIUM','LOW','INFO'].map(s=>`<span><i class="sev-${s}"></i>${severityLabel(s)}: ${counts[s]||0}</span>`).join('');} $('historyMetric').addEventListener('change',renderHistory);renderHistory();$('assets').innerHTML=data.assets.length?data.assets.slice(0,10).map(i=>`<div class="asset-row"><span class="asset-name" title="${esc(i.target)}">${esc(i.target)}</span><div class="risk-track"><div class="risk-fill" style="width:${i.risk}%"></div></div><span class="risk-value">${i.risk}</span></div>`).join(''):'<div class="empty">Sin activos vulnerables</div>';$('riskFormula').textContent=`Fórmula: ${meta.risk_formula}. La exposición combina la probabilidad de al menos un hallazgo material.`;
 $('priority').innerHTML=data.priority.length?data.priority.map(r=>`<article class="queue-item"><div class="queue-top">${badge(severityLabel(r.severity),`severity sev-${r.severity}`)}<strong>${r.risk}</strong></div><div class="queue-title" title="${esc(r.title)}">${esc(r.title)}</div><div class="queue-meta">${esc(r.target)} · ${statusLabel(r.status)} · ${esc(r.confidence)}</div><button class="btn small" data-inspect="${esc(r.id)}" data-asset="${esc(r.asset)}" style="margin-top:10px">Revisar</button></article>`).join(''):'<div class="empty">No hay hallazgos activos</div>';const health=meta.tools.counts||{};$('toolHealth').innerHTML=Object.keys(health).length?Object.entries(health).map(([k,v])=>`<span class="health-chip"><strong>${v}</strong> ${esc(k)}</span>`).join(''):'<span class="muted">Sin telemetría externa disponible</span>';$('toolWarnings').innerHTML=(meta.tools.degraded||[]).map(i=>`<li><strong>${esc(i.tool)} ${esc(i.profile)}</strong> · ${esc(i.target)} — ${esc(i.error||i.status)}</li>`).join('');$('runtimeDetail').textContent=[`Estado: ${meta.runtime.status||'N/D'}`,`Fase: ${meta.runtime.phase||'N/D'}`,`Progreso: ${meta.runtime.percent}%`,`Targets: ${meta.runtime.targets_completed}/${meta.runtime.target_total}`,`Actualizado: ${meta.runtime.updated_at||'N/D'}`].join('\n');
 let reconView='targets',reconQuery='';const recon=data.recon||{};function arr(v){return Array.isArray(v)?v:(v?[String(v)]:[])}function chips(v,max=18){const items=arr(v).filter(Boolean);return items.length?`<div class="chips">${items.slice(0,max).map(x=>`<span class="chip">${esc(x)}</span>`).join('')}${items.length>max?`<span class="chip muted">+${items.length-max} mas</span>`:''}</div>`:'<span class="muted">N/D</span>'}function reconMatch(row){const q=reconQuery.toLowerCase();return !q||JSON.stringify(row).toLowerCase().includes(q)}function reconSection(label,value,max){return `<div class="recon-section"><strong>${esc(label)}</strong>${chips(value,max)}</div>`}function renderRecon(){const body=$('reconBody');if(!body)return;if(!recon.available){body.innerHTML='<div class="empty">Recon Matrix aun no esta disponible. Ejecuta un escaneo para poblarla.</div>';$('reconScope').textContent='Sin matriz de reconocimiento';return}if(reconView==='hits'){const rows=(recon.hits||[]).filter(reconMatch).slice(0,400);$('reconScope').textContent=`${rows.length} rutas filtradas · ${recon.summary?.rutas||0} rutas registradas`;body.innerHTML=`<div class="table-wrap"><table class="hit-table"><thead><tr><th>Estado</th><th>Target</th><th>Ruta</th><th>Clasificación</th><th>Soft404</th><th>Evidencia</th></tr></thead><tbody>${rows.length?rows.map(h=>`<tr><td class="status-${esc(h.status)}">${esc(h.status||'N/D')}</td><td>${esc(h.target)}</td><td><code>${esc(h.url||h.path)}</code></td><td>${esc(h.clasificacion||'N/D')}</td><td>${esc(h.soft404||'N/D')}</td><td>${esc(h.evidencia||h.marcador||'')}</td></tr>`).join(''):'<tr><td colspan="6"><div class="empty">No hay rutas para el filtro actual.</div></td></tr>'}</tbody></table></div>`;return}const rows=(recon.targets||[]).filter(reconMatch);$('reconScope').textContent=`${rows.length} target(s) visibles · WAF en ${recon.summary?.waf||0} target(s)`;body.innerHTML=rows.length?`<div class="recon-grid">${rows.map(r=>`<article class="recon-card"><h4>${esc(r.target)}</h4><div class="recon-meta">${badge(esc(r.tipo||'Objetivo'),'status-RECURRING')}${r.ip?badge(esc(r.ip),'status-NOT_SEEN'):''}${r.ultima?badge(`Actualizado ${esc(r.ultima.slice(0,19))}`,'status-NEW'):''}</div>${reconSection('URL base',r.url? [r.url]:[],4)}${reconSection('WAF / CDN',arr(r.waf).concat(r.wafw00f?[r.wafw00f]:[],r.perfil_waf?[r.perfil_waf]:[]),10)}${reconSection('Puertos y servicios',arr(r.puertos).concat(arr(r.servicios)),18)}${reconSection('Tecnologías',arr(r.tecnologias).concat(arr(r.whatweb)),24)}${reconSection('Rutas / endpoints',r.rutas,28)}${reconSection('Login y subdominios',arr(r.login).concat(arr(r.subdominios)),20)}${reconSection('Headers y cookies',arr(r.headers).concat(r.cookies?[r.cookies]:[]),18)}${reconSection('Librerías JavaScript',r.js,20)}</article>`).join('')}</div>`:'<div class="empty">No hay objetivos de reconocimiento para el filtro actual.</div>'}renderRecon();
 function unique(k){return[...new Set(data.rows.map(r=>r[k]).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b)))}function fill(id,vals,label){vals.forEach(v=>$(id).insertAdjacentHTML('beforeend',`<option value="${esc(v)}">${esc(label?label(v):v)}</option>`))}fill('severityFilter',['CRITICAL','HIGH','MEDIUM','LOW','INFO'],severityLabel);fill('targetFilter',unique('target'));fill('confidenceFilter',unique('confidence'));fill('sourceFilter',[...new Set(data.rows.flatMap(r=>String(r.sources||'').split(',').map(v=>v.trim()).filter(Boolean)))].sort());function matchView(r){if(state.view==='ALL')return true;if(state.view==='ACTIVE')return r.state==='ACTIVE';if(state.view==='NOT_SEEN')return r.state==='NOT_SEEN';if(state.view==='RETEST')return state.retest.has(retestKey(r.id,r.asset));return r.status===state.view}function sortVal(r,k){if(k==='severity')return severityRank[r.severity]??99;if(k==='risk')return Number(r.risk)||0;return String(r[k]??'').toLowerCase()}function filtered(){const q=state.query.toLowerCase();return data.rows.filter(r=>matchView(r)&&(!state.severity||r.severity===state.severity)&&(!state.target||r.target===state.target)&&(!state.confidence||r.confidence===state.confidence)&&(!state.source||String(r.sources||'').split(',').map(v=>v.trim()).includes(state.source))&&(!q||[r.id,r.target,r.asset,r.title,r.url,r.evidence,r.sources,r.category].some(v=>String(v||'').toLowerCase().includes(q)))).sort((a,b)=>{const av=sortVal(a,state.sort),bv=sortVal(b,state.sort);return av<bv?-state.direction:av>bv?state.direction:0})}
@@ -834,7 +873,9 @@ def generar_dashboard(df: pd.DataFrame) -> None:
     output = Path(ARCHIVO_SALIDA)
     output.parent.mkdir(parents=True, exist_ok=True)
     page = HTML_TEMPLATE.replace("__DASHBOARD_DATA__", _json_for_html(model))
-    output.write_text(_patch_dashboard_html(page), encoding="utf-8")
+    temporary = output.with_suffix('.tmp.html')
+    temporary.write_text(enhance_daily_html(_patch_dashboard_html(page)), encoding="utf-8")
+    temporary.replace(output)
     print(f"[+] DASHBOARD v{DASHBOARD_VERSION} GENERADO: {output.resolve()} | activos={model['meta']['active']} historicos={model['meta']['not_seen']}")
 
 

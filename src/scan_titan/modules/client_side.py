@@ -134,65 +134,20 @@ class ClientSideModule(VulnerabilityModule):
         return findings
 
     def _dom_xss(self, ctx: ScanContext, result: Any, sources: list[tuple[str, str]]) -> list[Finding]:
-        hits = []
+        # Merely having a source and sink somewhere in a bundle proves no flow.
+        from .javascript_recon import analyze_javascript
         for source, text in sources:
-            found_sources = [item for item in self.DOM_SOURCES if item in text]
-            found_sinks = [item for item in self.DOM_SINKS if item in text]
-            if found_sources and found_sinks:
-                hits.append(f"{source}: sources={found_sources[:5]} sinks={found_sinks[:5]}")
-        if hits:
-            return [
-                Finding(
-                    target=ctx.target.display,
-                    category="Client-Side",
-                    severity="Medium",
-                    title="DOM XSS sink indicators detected",
-                    url=result.final_url,
-                    evidence=clean_text(" | ".join(hits), 900),
-                    source=self.name,
-                    confidence="low",
-                )
-            ]
+            info = analyze_javascript(result.final_url if source == "html" else source, text, ctx.target.url)
+            ctx.recon.setdefault("dom_static_candidates", []).extend(info["dom_flows"])
         return []
 
     async def _front_end_tokens(self, ctx: ScanContext, result: Any, soup: Any) -> list[Finding]:
-        sources = [("html", result.text)]
-        for script in soup.find_all("script", src=True)[:40]:
-            url = urllib.parse.urljoin(result.final_url, script.get("src"))
-            js = await ctx.http.request("GET", url, allow_redirects=True)
-            if js and js.status == 200:
-                sources.append((url, js.text[:300000]))
-        findings = self._dom_xss(ctx, result, sources[1:])
-        for source, text in sources:
-            storage_hits = self._storage_and_cookie_hits(text)
-            if storage_hits:
-                findings.append(
-                    Finding(
-                        target=ctx.target.display,
-                        category="Client-Side",
-                        severity="Medium",
-                        title="Front-end storage/cookie access pattern",
-                        url=ctx.target.url if source == "html" else source,
-                        evidence=clean_text(storage_hits, 700),
-                        source=self.name,
-                        confidence="medium",
-                    )
-                )
-            for label, pattern in self.TOKEN_PATTERNS.items():
-                for match in re.findall(pattern, text, re.IGNORECASE)[:3]:
-                    findings.append(
-                        Finding(
-                            target=ctx.target.display,
-                            category="Client-Side",
-                            severity="Critical" if label in {"AWS Access Key", "Private Key"} else "High",
-                            title=f"Front-end token/secret exposed: {label}",
-                            url=ctx.target.url if source == "html" else source,
-                            evidence=clean_text(str(match), 120),
-                            source=self.name,
-                            confidence="medium",
-                        )
-                    )
-        return findings
+        from .javascript_recon import javascript_recon
+        if "javascript_recon" not in ctx.recon:
+            await javascript_recon(ctx, result)
+        # Candidate keys, public identifiers and storage access are recon. Never
+        # claim a usable credential without verifying its security implications.
+        return []
 
     def _storage_and_cookie_hits(self, text: str) -> str:
         patterns = {

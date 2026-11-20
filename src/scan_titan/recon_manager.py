@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
+from excel_safety import write_openpyxl_data
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill, Side, Border
 from openpyxl.utils import get_column_letter
@@ -423,7 +424,8 @@ class ReconMatrixManager:
                 incoming=new_value,
                 preserve_existing=preserve_existing,
             )
-            cell = worksheet.cell(row=existing_row, column=col_idx, value=value)
+            cell = worksheet.cell(row=existing_row, column=col_idx)
+            write_openpyxl_data(cell, value)
             cell.alignment = Alignment(vertical="top", wrap_text=True)
             cell.border = self._thin_border()
 
@@ -470,6 +472,7 @@ class ReconMatrixManager:
                     self._initialize_sheet(worksheet)
                 if self.WORDLIST_HITS_SHEET not in workbook.sheetnames:
                     self._initialize_wordlist_hits_sheet(workbook.create_sheet(self.WORDLIST_HITS_SHEET))
+                self._normalize_existing_data_cells(workbook)
                 return workbook
             except Exception:
                 pass
@@ -480,6 +483,15 @@ class ReconMatrixManager:
         self._initialize_sheet(worksheet)
         self._initialize_wordlist_hits_sheet(workbook.create_sheet(self.WORDLIST_HITS_SHEET))
         return workbook
+
+    def _normalize_existing_data_cells(self, workbook: Workbook) -> None:
+        # Recon sheets have data columns only; they contain no trusted formulas.
+        for name, width in ((self.SHEET, len(self.COLUMNS)),
+                            (self.WORDLIST_HITS_SHEET, len(self.WORDLIST_HIT_COLUMNS))):
+            for row in workbook[name].iter_rows(min_row=self.DATA_START_ROW, max_col=width):
+                for cell in row:
+                    if cell.data_type in {"f", "e"} and isinstance(cell.value, str):
+                        write_openpyxl_data(cell, cell.value)
 
     def _initialize_sheet(self, worksheet: Any) -> None:
         worksheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(self.COLUMNS))
@@ -661,7 +673,8 @@ class ReconMatrixManager:
     def _append_wordlist_values(self, worksheet: Any, values: list[Any]) -> None:
         row_idx = max(self.DATA_START_ROW, worksheet.max_row + 1)
         for col_idx, value in enumerate(values[: len(self.WORDLIST_HIT_COLUMNS)], start=1):
-            cell = worksheet.cell(row=row_idx, column=col_idx, value=value)
+            cell = worksheet.cell(row=row_idx, column=col_idx)
+            write_openpyxl_data(cell, value)
             cell.alignment = Alignment(vertical="top", wrap_text=True)
             cell.border = self._thin_border()
 
@@ -697,7 +710,8 @@ class ReconMatrixManager:
         if row_idx < self.DATA_START_ROW:
             row_idx = self.DATA_START_ROW
         for col_idx, column in enumerate(self.WORDLIST_HIT_COLUMNS, start=1):
-            cell = worksheet.cell(row=row_idx, column=col_idx, value=self._cell_value(row_values.get(column, "")))
+            cell = worksheet.cell(row=row_idx, column=col_idx)
+            write_openpyxl_data(cell, self._cell_value(row_values.get(column, "")))
             cell.alignment = Alignment(vertical="top", wrap_text=True)
             cell.border = self._thin_border()
 

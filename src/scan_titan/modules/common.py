@@ -6,6 +6,7 @@ import random
 import re
 import time
 import urllib.parse
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Iterable, TypeVar
 
@@ -875,6 +876,7 @@ class Finding:
     last_seen: str = ""
     occurrences: int = 1
     state: str = "ACTIVE"
+    validation: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.severity = normalize_severity(self.severity)
@@ -1033,6 +1035,8 @@ class ScanPolicy:
     enable_whatweb: bool = True
     enable_subfinder: bool = True
     enable_wafw00f: bool = True
+    enable_katana: bool = True
+    enable_httpx: bool = True
     enable_zap: bool = False
     external_observability: bool = True
     allow_cloud_ssrf: bool = False
@@ -1175,6 +1179,10 @@ def record_probe_timeout(ctx: "ScanContext", module: str, item: Any, seconds: fl
 
 
 class AsyncHttpClient:
+    ROUTE_CACHE_MAX_BYTES = 64 * 1024 * 1024
+    ROUTE_CACHE_MAX_ENTRIES = 12_000
+    ROUTE_CACHE_MAX_BODY = 64 * 1024
+
     def __init__(
         self,
         session: aiohttp.ClientSession,
@@ -1198,6 +1206,12 @@ class AsyncHttpClient:
         self.requests_waiting = 0
         self.requests_active = 0
         self.last_completed_at = time.monotonic()
+        self._route_cache: OrderedDict[str, HttpResult] = OrderedDict()
+        self._route_cache_bytes = 0
+        self.route_probed_urls: set[str] = set()
+        self.route_cache_hits = 0
+        self.version_observations: list[dict[str, str]] = []
+        self._version_keys: set[tuple[str, str, str]] = set()
 
     def _stop_requested(self) -> bool:
         control = self.limits.runtime_control
@@ -1206,6 +1220,34 @@ class AsyncHttpClient:
     def open_circuit(self, reason: str) -> None:
         self.circuit_open = True
         self.circuit_reason = reason
+
+    async def request_route(self, url: str, *, timeout: float | None = None) -> HttpResult | None:
+        """Reuse successful anonymous route probes within one target scan."""
+        if self.limits.runtime_control:
+            await self.limits.runtime_control.wait_if_paused()
+        if self._stop_requested():
+            return None
+        cached = self._route_cache.get(url)
+        if cached is not None:
+            self._route_cache.move_to_end(url)
+            self.route_cache_hits += 1
+            return cached
+        result = await self.request("GET", url, allow_redirects=False, timeout=timeout)
+        if result is None:
+            return None
+        if result.status in {408, 409, 425, 429} or result.status >= 500:
+            return result
+        self.route_probed_urls.add(url)
+        size = len(result.text)
+        if size > self.ROUTE_CACHE_MAX_BODY:
+            return result
+        self._route_cache[url] = result
+        self._route_cache_bytes += size
+        while (len(self._route_cache) > self.ROUTE_CACHE_MAX_ENTRIES
+               or self._route_cache_bytes > self.ROUTE_CACHE_MAX_BYTES):
+            _, old = self._route_cache.popitem(last=False)
+            self._route_cache_bytes -= len(old.text)
+        return result
 
     async def request(
         self,
@@ -1281,6 +1323,15 @@ class AsyncHttpClient:
                         (value for key, value in headers_dict.items() if key.lower() == "content-type"),
                         "",
                     )
+                    from version_intelligence import extract_components
+                    for key, value in headers_dict.items():
+                        if key.lower() not in {'server', 'x-powered-by'}:
+                            continue
+                        for item in extract_components(value, url, f'header:{key}'):
+                            identity = (item['product'], item['version'], item['source'])
+                            if identity not in self._version_keys and len(self.version_observations) < 200:
+                                self._version_keys.add(identity)
+                                self.version_observations.append(item)
                     return HttpResult(
                         url=url,
                         final_url=str(response.url),

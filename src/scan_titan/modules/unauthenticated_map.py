@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import re
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -16,6 +15,7 @@ from .common import (
     clean_text,
     is_soft_auth_redirect,
     soft_auth_redirect_reason,
+    run_bounded,
 )
 
 
@@ -120,10 +120,8 @@ class UnauthenticatedMapModule(VulnerabilityModule):
             tested += 1
             if tested == 1 or tested % 50 == 0:
                 ctx.heartbeat(self.name, path, tested, len(records))
-            result = await ctx.http.request(
-                "GET",
+            result = await ctx.http.request_route(
                 urllib.parse.urljoin(ctx.target.url, path),
-                allow_redirects=False,
                 timeout=min(ctx.limits.timeout, 8),
             )
             if not result or result.status not in self.HIT_STATUSES:
@@ -155,13 +153,7 @@ class UnauthenticatedMapModule(VulnerabilityModule):
         return list(dict.fromkeys(path for path in candidates if path))[: budget + len(self.DEFAULT_PATHS)]
 
     async def _run_bounded(self, items: list[str], worker: Any) -> None:
-        semaphore = asyncio.Semaphore(self.MAX_WORKERS)
-
-        async def guarded(item: str) -> None:
-            async with semaphore:
-                await worker(item)
-
-        await asyncio.gather(*(guarded(item) for item in items))
+        await run_bounded(items, worker, limit=self.MAX_WORKERS)
 
     async def _crawl_directory_indexes(
         self,

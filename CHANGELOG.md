@@ -1,8 +1,57 @@
+## Unreleased — Potencia de motores externos (2026-11-20)
+
+- ZAP: alertas paginadas por riesgo (High→Info) y tope por defecto 2000; antes el tope de 250 se llenaba con instancias pasivas/informativas y descartaba las alertas del escaneo activo (IDs mas altos).
+- ZAP: escaneo activo sobre todo el contexto del origen; antes solo atacaba el subarbol de la URL objetivo (p. ej. `/app/login`), dejando `/api` y rutas hermanas sin cobertura activa.
+- ZAP: AJAX Spider (Firefox headless, limite de tiempo) e importacion de definiciones OpenAPI/GraphQL descubiertas por `api_dast`.
+- Nmap: superficie TCP ampliada (1-1024 + ~150 puertos de bases de datos, brokers, Docker/Kubernetes, Java y administracion); `-p-` con `--min-rate` en `--full`; deteccion de version completa (sin `--version-light`); `--script-timeout`.
+- Nmap: scripts seguros adicionales (NFS, Redis, Memcached, MongoDB, CouchDB, rsync, RDP) y clasificador `service_exposure.py` con firmas exactas NSE (VNC sin auth, X11 abierto, Redis/Mongo/Couch sin auth, FTP anonimo escribible, RDP sin NLA, proxy abierto, metodos HTTP riesgosos, NTLM info, clave TLS comprometida, Docker API).
+- Nmap: perfil `udp_services` (DNS recursivo, SNMP `public`, IPMI, NTP, IKE, NetBIOS, UPnP); estado `unavailable` explicito si faltan privilegios de captura.
+- Nmap: `vulners` solo en su perfil dedicado `--version-all` (evita CVE duplicados con dos titulos).
+- SSH: Terrapin CVE-2023-48795 por algoritmos negociados y ausencia de strict kex; SSHv1; correlacion de version OpenSSH (CVE-2024-6387 con builds corregidos Ubuntu/Debian, CVE-2025-26466, CVE-2018-15473) con confianza reducida si hay sufijo de proveedor.
+- Nuclei: perfil `network_services_scan` (plantillas network/javascript/ssl contra cada `host:puerto` abierto de Nmap, tambien en hosts sin HTTP) y `dast_scan` (`-dast` sobre URLs con parametros, una por ruta y conjunto de parametros).
+- Nuclei: `javascript/cves` en `cve_scan`; `severity`, `retries` y `request_timeout_seconds` de config.yaml ahora se aplican; exclusion de `brute` cuando `allow_bruteforce=false`; actualizacion de plantillas si superan `templates_max_age_days`.
+- Pruebas: `tests/test_engine_power.py` y validacion real en loopback `tools/validate_engine_power.py`.
+- Telemetria: el heartbeat de un submodulo (p. ej. `xss_reflected`) se atribuye al modulo padre activo de su objetivo; antes creaba filas fantasma y desplazaba el modulo y su progreso en el monitor.
+- FFUF: se registran `ffuf_raw_results` y `ffuf_results_truncated` cuando los resultados superan `MAX_FFUF_RECON_HITS`; antes el recorte era silencioso.
+- Suite de pruebas en verde (236): tests alineados con contratos vigentes (SSRF diferencial con control, CVSS localizado, topes de recon de 10000, perfiles multiples de Nmap/Nuclei con listas `-l`, `ScanLimits` real); la comprobacion del exportador privado se omite de forma explicita solo en el workspace privado.
+
+## Unreleased — DAST precision and analyst triage
+
+- Independent baseline replay for internal and external XSS, SQLi and traversal alerts; retain inconclusive results outside confirmed findings.
+- Replace generic ODBC/database keyword evidence with repeatable explicit SQL error signatures; paired boolean and time controls.
+- Bounded same-origin JavaScript/source-map reconnaissance with redacted credential candidates in Daily.
+- Endpoint-scoped discard/restore decisions persisted by the local Daily viewer, import/export and browser fallback.
+- Preserve historical unvalidated alerts for revalidation instead of labelling every alert validated.
+
 # Changelog de Scan Titan
 
 Este archivo registra los cambios funcionales verificables de cada version.
 
 Las versiones `21.3.2` y `21.3.3` documentan iteraciones locales verificadas que se consolidaron en `22.0.0`; no se publicaron como tags independientes.
+
+## [22.5.0] - 2026-11-05
+
+- Daily: grafica inicial de hallazgos vigentes, con selector independiente de observaciones diarias.
+- Catalogo local con rangos de RetireJS, avisos oficiales de PHP y Apache, y ciclos de soporte de endoflife.date.
+- Auditoria de componentes con version exacta en headers, JS, WhatWeb/Wappy y Nmap; hallazgos separados del recon.
+- Actualizacion semanal acotada, cache offline, hashes y referencias; distincion entre EOL, correlacion de version y validacion funcional.
+
+## [22.4.1] - 2026-10-23
+
+- Resultados de rutas compartidos por objetivo; FFUF prueba entradas aun pendientes y registra ahorro de peticiones.
+- Dos objetivos HTTP simultaneos con 20 solicitudes globales y herramientas externas serializadas.
+- Nuclei sin limite total por defecto, con corte por ausencia de progreso y parser de estadisticas fragmentadas.
+- Perfiles Nuclei de vulnerabilidades/CVE antes del conservador; menos URLs semilla en modo normal.
+- Nmap evita repetir `http-slowloris-check` cuando el perfil base lo cubrio correctamente.
+- Telemetria por objetivo y correccion de parametros descubiertos en auditoria de roles.
+
+## [22.4.0] - 2026-10-23
+
+- Wrappers asincronos y acotados para Katana y httpx de ProjectDiscovery.
+- Rutas y tecnologias de recon filtradas al origen exacto y disponibles antes de las pruebas web.
+- Deteccion del conflicto con el comando `httpx` del paquete Python en Windows.
+- Salida y cobertura de cada herramienta en la observabilidad existente, sin promover recon a vulnerabilidades.
+- Guia de validacion manual basica con sqlmap y XSSer, sin automatizar pruebas intrusivas.
 
 ## Actualizaciones del monitor - 2026-10-16
 

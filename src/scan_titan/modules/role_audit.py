@@ -26,7 +26,11 @@ class RoleAuditor(VulnerabilityModule):
             if item.get('owner_profile') and item.get('url'):
                 objects.append({**item, 'allowed_profiles': item.get('allowed_profiles') or [item['owner_profile']],
                                 'object_test': True})
-        discovered = [item for item in ctx.recon.get('endpoints', []) if isinstance(item, dict)]
+        discovered = [
+            {'url': item['url']}
+            for item in ctx.recon.get('endpoints', [])
+            if isinstance(item, dict) and isinstance(item.get('url'), str)
+        ]
         requests = [*objects, *configured, *discovered][:int(config.get('max_requests', 40))]
         identities = ['Unauth', *manager.authenticated_names()]
         records: list[dict[str, Any]] = []

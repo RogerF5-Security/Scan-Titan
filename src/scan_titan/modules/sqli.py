@@ -5,6 +5,7 @@ import urllib.parse
 
 from .common import Finding, ScanContext, VulnerabilityModule, clean_text, url_with_params
 from .payload_utils import sqli_payloads
+from .injection_validation import DB_ERRORS
 
 
 class SqliModule(VulnerabilityModule):
@@ -130,12 +131,9 @@ class SqliModule(VulnerabilityModule):
             result = await ctx.http.request("GET", url, params={param: payload}, timeout=min(ctx.limits.timeout, 6))
             if not result:
                 return
-            lower = result.text.lower()
-            baseline_lower = str(getattr(baseline, "text", "") or "").lower()
-            hit = next(
-                (item for item in self.DB_ERRORS if item in lower and item not in baseline_lower),
-                None,
-            )
+            baseline_body = str(getattr(baseline, "text", "") or "")
+            match = DB_ERRORS.search(result.text.replace(payload, ""))
+            hit = match.group() if match and baseline and not DB_ERRORS.search(baseline_body) else None
             if not hit:
                 return
             async with lock:

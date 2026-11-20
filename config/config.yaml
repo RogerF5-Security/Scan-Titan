@@ -7,7 +7,7 @@ scan:
   targets: []
   targets_file: targets/targets.txt
   output_dir: reports
-  target_concurrency: 1
+  target_concurrency: 2
   http_concurrency: 20
   verify_tls: false
   timeout_seconds: 8
@@ -26,7 +26,7 @@ scan:
   route_delay_seconds: 0.0
   route_jitter_min_seconds: 0.5
   route_jitter_max_seconds: 1.5
-  route_throttle_batch_size: 10
+  route_throttle_batch_size: 25
   # Hard ceiling for every intelligent module. A timeout skips only that
   # module, records the reason, drains its workers, and continues the pipeline.
   module_timeout_seconds: 900
@@ -60,7 +60,7 @@ scan:
     advanced_logic: 220
   module_timeout_overrides:
     service_access: 240
-    recon_surface: 600
+    recon_surface: 900
     api_spa: 300
     api_dast: 600
     status_route_filter: 180
@@ -161,6 +161,7 @@ tools:
       - vulners_cvss
       - ssh_security
       - smb_security
+      - udp_services
     profile_timeouts:
       network_vulnerability_scan: 1800
       ssl_tls_surface: 300
@@ -168,6 +169,7 @@ tools:
       vulners_cvss: 300
       ssh_security: 180
       smb_security: 180
+      udp_services: 480
   ffuf:
     enabled: true
     binary: ffuf
@@ -194,6 +196,14 @@ tools:
     enabled: true
     binary: wafw00f
     timeout_seconds: 240
+  katana:
+    enabled: true
+    binary: katana
+    timeout_seconds: 90
+  httpx:
+    enabled: true
+    binary: httpx
+    timeout_seconds: 30
   nuclei:
     enabled: true
     binary: nuclei
@@ -201,20 +211,29 @@ tools:
     severity: critical,high,medium,low
     system_resolvers: true
     disable_host_error_skip: true
-    max_seed_urls: 12
+    max_seed_urls: 4
     origin_only_broad_profiles: true
-    idle_timeout_seconds: 180
+    idle_timeout_seconds: 300
     retries: 1
     request_timeout_seconds: 10
-    timeout_seconds: 1500
+    timeout_seconds: 0  # sin limite total; se detiene si no avanzan las peticiones
+    # Actualiza nuclei-templates una vez por ejecucion si superan la antiguedad.
+    update_templates: true
+    templates_max_age_days: 7
+    # URLs con parametros (una por ruta + conjunto de parametros) para -dast.
+    dast_max_urls: 40
     profiles:
       - vulnerability_scan
       - conservative_scan
       - cve_scan
+      - network_services_scan
+      - dast_scan
     profile_timeouts:
-      vulnerability_scan: 600
-      conservative_scan: 300
-      cve_scan: 600
+      vulnerability_scan: 0
+      conservative_scan: 0
+      cve_scan: 0
+      network_services_scan: 0
+      dast_scan: 0
   zap:
     enabled: true
     binary: zap.bat
@@ -232,8 +251,15 @@ tools:
     active_timeout_seconds: 900
     progress_timeout_seconds: 180
     max_seed_urls: 20
-    max_alerts: 250
+    # Alertas paginadas por riesgo (High->Info); el tope solo recorta lo de menor riesgo.
+    max_alerts: 2000
     max_children: 20
+    # Spider con navegador headless para rutas SPA renderizadas por JavaScript.
+    ajax_spider: true
+    ajax_spider_browser: firefox-headless
+    ajax_spider_timeout_seconds: 240
+    # Importa a ZAP las definiciones OpenAPI/GraphQL descubiertas por api_dast.
+    import_api_definitions: true
 
 active_testing:
   perform_upload_attempts: true
@@ -320,6 +346,12 @@ reporting:
   include_pipeline_findings: false
   technical_detail:
     enabled: false
+
+version_intelligence:
+  enabled: true
+  # Opt in explicitly in local config; campaign startup keeps the catalog frozen.
+  auto_update: false
+  refresh_days: 7
 
 dashboard:
   default_asset_criticality: "Medio"

@@ -118,7 +118,8 @@ class StoredXSS_Auditor(VulnerabilityModule):
                             title='Stored XSS execution after independent reload', url=candidate,
                             method='GET', param=str(field), source=self.name, confidence='high',
                             payload=payload, evidence=f'Canary={marker}; two independent GETs; exact browser dialog matched; submitted={action}',
-                            cwe='CWE-79', recommendation='Encode persisted content for its output context and sanitize allowed HTML.'))
+                            cwe='CWE-79', validation={'proof': 'independent_reload_browser_dialog'},
+                            recommendation='Encode persisted content for its output context and sanitize allowed HTML.'))
                         break
                 ctx.heartbeat(self.name, record['state'], submitted, len(findings))
         return findings

@@ -93,7 +93,7 @@ class PathDiscoveryModule(VulnerabilityModule):
         async def probe(path: str) -> None:
             nonlocal tested
             url = urllib.parse.urljoin(ctx.target.url, path)
-            result = await ctx.http.request("GET", url, allow_redirects=False)
+            result = await ctx.http.request_route(url)
             tested += 1
             if tested == 1 or tested % 25 == 0:
                 ctx.heartbeat(self.name, path, tested, len(findings))
