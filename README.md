@@ -17,11 +17,12 @@ y exponen fallos/limites de cobertura.
 
 ![Captura de la web pública de Scan Titan](assets/scan-titan-web-screenshot.png)
 
-## Extension para Chrome
+## Extension para navegador
 
-El ecosistema Scan Titan incluye una extension complementaria para Google Chrome, orientada a agilizar el reconocimiento y el flujo de evaluacion web desde el navegador.
+El ecosistema Scan Titan incluye una extension complementaria para Google Chrome y Mozilla Firefox, orientada a agilizar el reconocimiento y el flujo de evaluacion web desde el navegador.
 
-[Instalar Scan Titan desde Chrome Web Store](https://chromewebstore.google.com/detail/scan-titan/epdbmbbfkmmhkfcfhlpncfkehgcaldcb)
+- [Instalar Scan Titan desde Chrome Web Store](https://chromewebstore.google.com/detail/scan-titan/epdbmbbfkmmhkfcfhlpncfkehgcaldcb)
+- [Instalar Scan Titan desde Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/scan-titan/)
 
 ## Inicio rapido
 
