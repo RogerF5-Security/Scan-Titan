@@ -1,3 +1,14 @@
+## Unreleased — Control de falsos positivos (2026-11-20)
+
+- Rutas: oraculo soft-404 compartido (`modules/soft_not_found.py`) por origen, directorio padre y extension; compara estado, redireccion y cuerpo normalizado (sin reflejos de la ruta ni tokens volatiles). Antes habia una sola linea base sin extension y comparada solo por titulo, por lo que SPA catch-all, paginas de debug 404 y bloqueos WAF 403 por extension se reportaban como rutas.
+- Rutas: un hallazgo exige contenido probatorio en el cuerpo (`.env`, `.git`, claves, actuator, phpinfo, listado). Un 401/403 o un nombre "sensible" sin contenido queda en recon; manifiestos de dependencias/API como Low. El bypass 403 tambien debe distinguirse de una ruta inexistente.
+- Logs expuestos: se exige estructura real de log (access/error log de Apache/Nginx, Laravel/Monolog, log4j/logging ISO, traceback completo o listado con `.log`) y respuesta distinta de ruta inexistente; antes bastaba la palabra `error` o `warning` en una respuesta 200 (7 High falsos por objetivo con SPA). Ahora tambien se detectan logs reales sin esas palabras.
+- Versiones: un hallazgo por componente y version con todos los avisos (IDs, desglose por severidad, referencias) en lugar de uno por CVE; severidad limitada a Medium por ser correlacion de version sin validacion funcional.
+- Calidad (retroactivo sobre estado y Daily, quedan en "Por validar"): avisos por CVE sustituidos por el resumen, logs/rutas antiguos sin prueba de contenido, `http-slowloris-check` "probablemente vulnerable", `http-vuln-cve2011-3192`, CVE inferidos por version con `nmap:vulners`, y reglas activas de ZAP sin evidencia en la respuesta ni confianza alta. La regla de calidad ya lee `last_evidence` de los registros de estado.
+- Candidatos: lo excluido por calidad en un escaneo nuevo se guarda en el estado (Daily, "Por validar") en lugar de descartarse; no entra en reportes, totales de consola ni captura de evidencias. La cobertura registra `quality_candidates`.
+- Ciclo de vida: en escaneos parciales, un hallazgo ausente pasa a NOT_SEEN si todos los modulos/herramientas que lo produjeron terminaron completos (sin timeout ni error); antes cualquier timeout lo mantenia ACTIVE indefinidamente (52 de 60 ejecuciones recientes eran parciales). La cobertura registra `completed_sources`.
+- Pruebas: `tests/test_false_positive_controls.py` y validacion en loopback `tools/validate_false_positives.py` (SPA catch-all, debug 404, WAF por extension y archivos reales).
+
 ## Unreleased — Potencia de motores externos (2026-11-20)
 
 - ZAP: alertas paginadas por riesgo (High→Info) y tope por defecto 2000; antes el tope de 250 se llenaba con instancias pasivas/informativas y descartaba las alertas del escaneo activo (IDs mas altos).

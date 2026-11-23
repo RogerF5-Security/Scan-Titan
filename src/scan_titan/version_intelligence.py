@@ -305,14 +305,19 @@ class VersionAuditor:
         findings = []
         seen: dict[tuple[str, str], Any] = {}
         for (product, version), items in inventory.items():
-            for issue in self.catalog.issues(product, version):
+            issues = self.catalog.issues(product, version)
+            advisories = [issue for issue in issues if issue['kind'] != 'eol']
+            if advisories:
+                findings.append(self._advisory_summary(ctx, product, version, items, advisories))
+            for issue in issues:
+                if issue['kind'] != 'eol':
+                    continue
                 key = product, issue['id']
                 if key in seen:
                     seen[key].details += f' | Otra version afectada observada: {version}; {json.dumps(items[:6], ensure_ascii=False)}'
                     continue
-                eol = issue['kind'] == 'eol'
-                title = (f'Software sin soporte de seguridad: {product} {issue["cycle"]}' if eol else
-                         f'Componente con aviso de seguridad: {product} | {issue["id"]}')
+                eol = True
+                title = f'Software sin soporte de seguridad: {product} {issue["cycle"]}'
                 evidence = (f'Componente={product}; version observada={version}; ID={issue["id"]}; '
                             f'{issue["detail"]}; corregir a={issue["fixed"]}; referencia={issue["reference"]}; '
                             f'fuentes={json.dumps(items[:6], ensure_ascii=False)}; '
@@ -333,6 +338,49 @@ class VersionAuditor:
                 seen[key] = findings[-1]
         ctx.heartbeat(self.name, f'{len(inventory)} componentes con version; base local con {len(self.catalog.data["sources"])} fuentes', len(inventory), len(findings))
         return findings
+
+    SEVERITY_RANK = {'Critical': 0, 'High': 1, 'Medium': 2, 'Low': 3, 'Info': 4}
+    # A version match does not prove the vulnerable module, configuration or a
+    # missing backport, so the summary never exceeds Medium until validated.
+    SUMMARY_SEVERITY_CAP = 'Medium'
+
+    def _advisory_summary(self, ctx: Any, product: str, version: str,
+                          items: list[dict[str, str]], advisories: list[dict[str, Any]]) -> Any:
+        from modules.common import Finding
+
+        ordered = sorted(advisories, key=lambda issue: (self.SEVERITY_RANK.get(issue['severity'], 5), issue['id']))
+        counts: dict[str, int] = {}
+        for issue in ordered:
+            counts[issue['severity']] = counts.get(issue['severity'], 0) + 1
+        highest = ordered[0]['severity']
+        severity = (self.SUMMARY_SEVERITY_CAP
+                    if self.SEVERITY_RANK.get(highest, 5) < self.SEVERITY_RANK[self.SUMMARY_SEVERITY_CAP]
+                    else highest)
+        listed = '; '.join(f'{issue["id"]} ({issue["severity"]})' for issue in ordered[:60])
+        if len(ordered) > 60:
+            listed += f'; ... y {len(ordered) - 60} mas'
+        breakdown = ', '.join(f'{name}={counts[name]}' for name in self.SEVERITY_RANK if counts.get(name))
+        references = sorted({issue['reference'] for issue in ordered if issue.get('reference')})[:5]
+        evidence = (f'Componente={product}; version observada={version}; avisos publicados={len(ordered)} '
+                    f'({breakdown}); severidad maxima del proveedor={highest}; IDs={listed}; '
+                    f'referencias={" ".join(references)}; fuentes={json.dumps(items[:6], ensure_ascii=False)}; '
+                    'Correlacion de version: no demuestra explotacion ni descarta backports, modulos '
+                    'deshabilitados o soporte extendido. Validar cada aviso relevante antes de reportarlo como explotable.')
+        return Finding(
+            target=ctx.target.display, category='Componentes/Versiones', severity=severity,
+            title=f'Componente con avisos de seguridad publicados: {product} {version}',
+            url=items[0]['url'], endpoint=f'{product}:{version}',
+            evidence=evidence, source='version_intelligence', confidence='medium',
+            evidence_strength='moderate', false_positive_risk='medium', cwe='CWE-1395',
+            cvss=f'{dict(Critical="9.0", High="7.5", Medium="5.3", Low="3.1").get(severity, "5.3")} '
+                 '(estimado; correlacion de version sin validacion funcional)',
+            owasp='A03:2025 - Fallos en la cadena de suministro de software',
+            impact=(f'La version observada coincide con {len(ordered)} avisos publicados; el impacto real depende de '
+                    'los modulos habilitados, la configuracion y los parches del distribuidor.'),
+            remediation=(f'Actualizar {product} a la ultima version corregida del proveedor y confirmar parches '
+                         f'del distribuidor. {" ".join(references[:2])}'),
+            manual_command=f'{"curl.exe" if os.name == "nt" else "curl"} -k -I --max-time 20 "{items[0]["url"]}"',
+        )
 
 
 if __name__ == '__main__':

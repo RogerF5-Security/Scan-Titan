@@ -1967,8 +1967,23 @@ class StateStore:
                 current["last_evidence"] = record.get("last_evidence")
         return migrated
 
+    @staticmethod
+    def _record_sources(record: dict[str, Any]) -> set[str]:
+        values = record.get("correlated_sources") or [record.get("source")]
+        if isinstance(values, str):
+            values = values.split(",")
+        return {str(item).split(":", 1)[0].strip().lower() for item in values if str(item or "").strip()}
+
     def enrich(self, findings: list[Finding], scanned_target: str, timestamp: str,
-               *, complete: bool = True) -> list[Finding]:
+               *, complete: bool = True, completed_sources: set[str] | None = None) -> list[Finding]:
+        """Merge findings into the state.
+
+        A previous ACTIVE finding that is absent now becomes NOT_SEEN when the
+        whole scan completed or, for partial scans, when every module/tool that
+        produced it ran to completion in this scan (it had the chance to see it
+        again). Before, any timeout anywhere kept stale findings ACTIVE forever.
+        """
+        completed_sources = {item.lower() for item in (completed_sources or set())}
         for finding in findings:
             finding.refresh_identity(finding.asset or scanned_target)
         unique = {finding.fingerprint: finding for finding in findings}
@@ -2026,11 +2041,15 @@ class StateStore:
                 "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             }
         for fingerprint, record in records.items():
-            if complete and record.get("target") == scanned_target and fingerprint not in unique:
-                if record.get("state") == "ACTIVE":
-                    record["previous_state"] = "ACTIVE"
-                    record["state"] = "NOT_SEEN"
-                    record["state_changed_at"] = timestamp
+            if record.get("target") != scanned_target or fingerprint in unique or record.get("state") != "ACTIVE":
+                continue
+            sources = self._record_sources(record)
+            if complete or (sources and sources <= completed_sources):
+                record["previous_state"] = "ACTIVE"
+                record["state"] = "NOT_SEEN"
+                record["state_changed_at"] = timestamp
+                if not complete:
+                    record["retired_by"] = "completed_sources"
         return sorted(
             unique.values(),
             key=lambda item: (SEVERITY_ORDER.get(item.severity, 99), item.category, item.title),
@@ -7211,11 +7230,18 @@ class ScanTitan:
         intelligence_tmp = intelligence_path.with_suffix('.tmp')
         intelligence_tmp.write_text(json.dumps(intelligence, ensure_ascii=False, indent=2), encoding='utf-8')
         intelligence_tmp.replace(intelligence_path)
+        quality_candidates: list[Finding] = []
         reportable_findings = correlate_findings(
-            self._reportable_findings(findings),
+            self._reportable_findings(findings, quality_candidates),
             asset=target.ip or target.display,
         )
         self.scorer.apply(reportable_findings)
+        # Findings excluded by quality rules (no proof yet) are kept in the state
+        # as candidates so the Daily lists them under "Por validar"; they never
+        # reach reports, console totals or evidence capture.
+        candidate_findings = (correlate_findings(quality_candidates, asset=target.ip or target.display)
+                              if quality_candidates else [])
+        self.scorer.apply(candidate_findings)
         incomplete = (self.config.runtime_control.finish_requested
                       or any(item.get('state') == 'INCONCLUSIVE' for item in recon.get('injection_triage', []))
                       or bool(recon.get('timeout_skips'))
@@ -7234,7 +7260,13 @@ class ScanTitan:
         Console.step(f"Cobertura y diagnostico: {coverage_path}")
         if incomplete:
             Console.warn('Cobertura incompleta: los hallazgos historicos ausentes conservan su estado anterior.')
-        enriched = self.state.enrich(reportable_findings, target.display, timestamp, complete=not incomplete)
+        completed_sources = self._completed_sources(recon)
+        coverage['completed_sources'] = sorted(completed_sources)
+        coverage['quality_candidates'] = len(candidate_findings)
+        coverage_path.write_text(json.dumps(coverage, indent=2, ensure_ascii=False), encoding='utf-8')
+        enriched = [item for item in self.state.enrich(
+            reportable_findings + candidate_findings, target.display, timestamp, complete=not incomplete,
+            completed_sources=completed_sources) if not finding_quality_exclusion(item)]
         await asyncio.to_thread(
             self.evidence.attach_artifacts,
             enriched,
@@ -7280,7 +7312,8 @@ class ScanTitan:
             "timestamp": timestamp,
         }
 
-    def _reportable_findings(self, findings: list[Finding]) -> list[Finding]:
+    def _reportable_findings(self, findings: list[Finding],
+                             candidates: list[Finding] | None = None) -> list[Finding]:
         min_rank = SEVERITY_ORDER.get(self.config.report_min_severity, SEVERITY_ORDER["Low"])
         reportable: list[Finding] = []
         decisions = load_decisions()
@@ -7310,6 +7343,9 @@ class ScanTitan:
             if "classified as" in title or title.startswith("functional site map"):
                 continue
             if finding_quality_exclusion(finding):
+                if candidates is not None:
+                    finding.severity = severity
+                    candidates.append(finding)
                 continue
             if str(finding.confidence or "").lower() == "low":
                 continue
@@ -7367,6 +7403,28 @@ class ScanTitan:
                 target=getattr(getattr(ctx, 'target', None), 'display', None),
             )
 
+    MODULE_SOURCE_ALIASES = {"component_versions": {"version_intelligence"}}
+
+    def _completed_sources(self, recon: dict[str, Any]) -> set[str]:
+        """Modules/tools that fully ran in this scan (no module/probe timeout, no error)."""
+        if self.config.runtime_control.finish_requested:
+            return set()
+        broken = {str(item.get("module", "")).lower() for key in ("timeout_skips", "module_errors")
+                  for item in (recon.get(key) or []) if isinstance(item, dict)}
+        sources: set[str] = set()
+        for name in recon.get("completed_modules") or []:
+            name = str(name).lower()
+            if name and name not in broken:
+                sources.add(name)
+                sources.update(self.MODULE_SOURCE_ALIASES.get(name, set()))
+        tools: dict[str, bool] = {}
+        for item in recon.get("external_coverage") or []:
+            if isinstance(item, dict) and item.get("tool"):
+                tool = str(item["tool"]).lower()
+                tools[tool] = tools.get(tool, True) and item.get("state") == "completed"
+        sources.update(tool for tool, done in tools.items() if done)
+        return sources
+
     async def _run_module(self, module: Any, ctx: ScanContext, timeout: int) -> list[Finding]:
         Console.phase(f"MODULE: {module.name}")
         throttle = self.config.apply_module_throttle(module.name, ctx.limits)
@@ -7395,6 +7453,10 @@ class ScanTitan:
             await ctx.injection_validator.validate_all(ctx, findings)
             self._emit_new_findings(findings)
             status = "skipped" if self.config.runtime_control.finish_requested else "finished"
+            if status == "finished":
+                completed = ctx.recon.setdefault("completed_modules", [])
+                if isinstance(completed, list) and module.name not in completed:
+                    completed.append(module.name)
             self.telemetry.module_end(module.name, findings, status, target=ctx.target.display)
             Console.ok(f"{module.name}: {len(findings)} hallazgo(s) en {time.monotonic() - started:.1f}s")
             return findings

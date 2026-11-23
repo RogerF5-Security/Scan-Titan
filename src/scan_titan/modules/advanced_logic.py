@@ -1,9 +1,29 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import urllib.parse
 
 from .common import Finding, ScanContext, VulnerabilityModule
+from .soft_not_found import SoftNotFoundOracle
+
+# Line shapes of real log files. Generic words such as "error" or "warning"
+# appear in almost any HTML page (SPA bundles, login forms, framework 404s),
+# so they are never accepted as proof on their own.
+LOG_LINE_PATTERNS = (
+    # Apache/Nginx combined access log
+    re.compile(r'^\S+ \S+ \S+ \[\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4}\] "(?:GET|POST|HEAD|PUT|DELETE|OPTIONS|PATCH) ', re.M),
+    # Laravel / Monolog
+    re.compile(r'^\[\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}[^\]]*\] \w+\.(?:ERROR|WARNING|INFO|DEBUG|CRITICAL|NOTICE)', re.M),
+    # Apache error log
+    re.compile(r'^\[\w{3} \w{3} \d{1,2} \d{2}:\d{2}:\d{2}(?:\.\d+)? \d{4}\] \[[\w:]+\]', re.M),
+    # Generic ISO timestamp + level (log4j, logback, Python logging)
+    re.compile(r'^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?\s*(?:\[[^\]]*\]\s*)?(?:ERROR|WARN(?:ING)?|INFO|DEBUG|FATAL|CRITICAL|TRACE)\b', re.M),
+    # Nginx error log
+    re.compile(r'^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} \[(?:error|warn|notice|crit|alert|emerg)\]', re.M),
+)
+TRACEBACK = re.compile(r'Traceback \(most recent call last\):\s*\n\s+File "', re.M)
+LOG_LISTING = re.compile(r'href="[^"]+\.log(?:\.\d+)?(?:\.gz)?"', re.I)
 
 
 class AdvancedLogicModule(VulnerabilityModule):
@@ -71,26 +91,59 @@ class AdvancedLogicModule(VulnerabilityModule):
 
     async def _logs(self, ctx: ScanContext) -> list[Finding]:
         findings = []
+        oracle = SoftNotFoundOracle.for_context(ctx)
         for idx, path in enumerate(self.LOG_PATHS, start=1):
             ctx.heartbeat(self.name, f"logs {path}", idx, len(findings))
             url = urllib.parse.urljoin(ctx.target.url, path)
             result = await ctx.http.request("GET", url, allow_redirects=False)
-            if not result:
+            if not result or result.status != 200:
                 continue
-            body = result.text.lower()
-            if result.status == 200 and any(marker in body for marker in ["exception", "traceback", " stack trace", "error", "warning"]):
-                findings.append(
-                    Finding(
-                        target=ctx.target.display,
-                        category="Advanced",
-                        severity="High",
-                        title=f"Exposed log/debug content: {path}",
-                        url=url,
-                        endpoint=path,
-                        status=str(result.status),
-                        evidence="Log/debug markers observed in response.",
-                        source=self.name,
-                        confidence="medium",
-                    )
+            proof = self.log_proof(result.text, getattr(result, "content_type", ""))
+            if not proof:
+                continue
+            # A framework debug page served for every unknown path also carries
+            # tracebacks; it must not be reported once per guessed log path.
+            if await oracle.verdict(url, result, path):
+                continue
+            findings.append(
+                Finding(
+                    target=ctx.target.display,
+                    category="Advanced",
+                    severity="Medium" if proof["kind"] == "directory_listing" else "High",
+                    title=f"Exposed log/debug content: {path}",
+                    url=url,
+                    endpoint=path,
+                    status=str(result.status),
+                    evidence=(f"{proof['detail']} | Content-Type={getattr(result, 'content_type', '') or '-'} | "
+                              f"Muestra: {proof['sample']}"),
+                    source=self.name,
+                    confidence="high",
+                    evidence_strength="strong",
+                    false_positive_risk="low",
                 )
+            )
         return findings
+
+    @staticmethod
+    def log_proof(body: str, content_type: str = "") -> dict[str, str]:
+        """Return proof that ``body`` is a log file or a log directory listing, else {}."""
+        text = str(body or "")[:200000]
+        head = text[:800].lower()
+        if "index of /" in head and LOG_LISTING.search(text):
+            return {"kind": "directory_listing", "detail": "Listado de directorio con archivos .log",
+                    "sample": re.sub(r"\s+", " ", text[:160])}
+        match = TRACEBACK.search(text)
+        if match:
+            return {"kind": "traceback", "detail": "Traceback de Python completo en la respuesta",
+                    "sample": re.sub(r"\s+", " ", text[match.start():match.start() + 160])}
+        if "html" in str(content_type or "").lower() or "<html" in head or "<!doctype" in head:
+            return {}
+        for pattern in LOG_LINE_PATTERNS:
+            lines = pattern.findall(text)
+            if len(lines) >= 3:
+                first = pattern.search(text)
+                end = text.find("\n", first.start())
+                sample = text[first.start():end if end > 0 else first.start() + 160]
+                return {"kind": "log_lines", "detail": f"{len(lines)} lineas con formato de log",
+                        "sample": sample[:160]}
+        return {}

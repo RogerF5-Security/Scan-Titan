@@ -16,6 +16,7 @@ from .common import (
     run_bounded,
     soft_auth_redirect_reason,
 )
+from .soft_not_found import SoftNotFoundOracle
 
 
 class PathDiscoveryModule(VulnerabilityModule):
@@ -73,7 +74,18 @@ class PathDiscoveryModule(VulnerabilityModule):
         "SERVER_SOFTWARE",
         "root:x:",
         "Index of /",
+        "ref: refs/heads/",
+        "[remote \"",
+        "DB_HOST=",
+        "AWS_SECRET_ACCESS_KEY",
+        "-----BEGIN OPENSSH PRIVATE KEY",
+        '"propertySources"',
+        '"activeProfiles"',
+        "<connectionStrings",
+        "<machineKey",
     ]
+    # Real but lower-impact content: dependency manifests and API descriptions.
+    LOW_CONTENT = ['"dependencies"', '"require"', '"openapi"', '"swagger"', '"paths"']
 
     async def run(self, ctx: ScanContext) -> list[Finding]:
         raw_paths = ctx.wordlists.get("rutas") or self.DEFAULT_PATHS
@@ -89,6 +101,8 @@ class PathDiscoveryModule(VulnerabilityModule):
         wordlist_hits: list[dict[str, Any]] = []
         tested = 0
         soft_404 = await self._soft_404_baseline(ctx)
+        oracle = SoftNotFoundOracle.for_context(ctx)
+        filtered_soft: list[dict[str, str]] = []
 
         async def probe(path: str) -> None:
             nonlocal tested
@@ -99,8 +113,11 @@ class PathDiscoveryModule(VulnerabilityModule):
                 ctx.heartbeat(self.name, path, tested, len(findings))
             if not result:
                 return
+            soft_reason = ""
+            if result.status in self.WORDLIST_HIT_STATUSES or result.status == 401:
+                soft_reason = await oracle.verdict(url, result, path)
             if result.status in self.WORDLIST_HIT_STATUSES:
-                soft404_filtered = self._looks_like_soft_404(result, soft_404)
+                soft404_filtered = bool(soft_reason)
                 lower_path = path.lower()
                 sensitive = any(marker in lower_path for marker in self.SENSITIVE_MARKERS)
                 wordlist_hits.append(
@@ -115,7 +132,9 @@ class PathDiscoveryModule(VulnerabilityModule):
                 )
             if result.status not in {200, 301, 302, 401, 403, 500}:
                 return
-            if self._looks_like_soft_404(result, soft_404, path):
+            if soft_reason:
+                if len(filtered_soft) < 200:
+                    filtered_soft.append({"path": path, "status": str(result.status), "reason": soft_reason})
                 return
             item = f"{path} ({result.status})"
             discovered.append(item)
@@ -124,9 +143,14 @@ class PathDiscoveryModule(VulnerabilityModule):
             if "login" in lower_path or "password" in lower_body:
                 login_forms.append(item)
             sensitive = any(marker in lower_path for marker in self.SENSITIVE_MARKERS)
-            if sensitive or result.status in {401, 403}:
-                confirmed_content = self._has_sensitive_content(result.text)
-                severity = "High" if result.status == 200 and sensitive and confirmed_content else "Medium"
+            # A finding needs proof in the body. A 401/403 only shows the control
+            # works, and a sensitive-looking name without content proves nothing:
+            # both stay in recon (discovered_paths / Recon Matrix).
+            confirmed_content = result.status == 200 and self._has_sensitive_content(result.text)
+            low_content = result.status == 200 and not confirmed_content and self._has_low_content(result.text)
+            if confirmed_content or low_content:
+                listing_only = confirmed_content and self._content_markers(result.text) == ["Index of /"]
+                severity = "Medium" if listing_only else ("High" if confirmed_content else "Low")
                 findings.append(
                     Finding(
                         target=ctx.target.display,
@@ -141,16 +165,18 @@ class PathDiscoveryModule(VulnerabilityModule):
                         elapsed=f"{result.elapsed:.2f}s",
                         evidence=(
                             f"Sensitive={sensitive} | ConfirmedContent={confirmed_content} | "
-                            f"Content-Type={result.content_type or '-'}"
+                            f"Marcadores={','.join(self._content_markers(result.text)) or 'manifiesto/API'} | "
+                            f"Content-Type={result.content_type or '-'} | "
+                            "Respuesta distinta de la de una ruta inexistente con la misma extension"
                         ),
                         source=self.name,
                         confidence="high" if confirmed_content else "medium",
                     )
                 )
-                if result.status in {401, 403}:
-                    bypass = await self._try_403_bypass(ctx, path, result, soft_404)
-                    if bypass:
-                        findings.append(bypass)
+            if result.status in {401, 403}:
+                bypass = await self._try_403_bypass(ctx, path, result, soft_404)
+                if bypass:
+                    findings.append(bypass)
 
         await run_bounded(
             paths[:ctx.limits.max_tests_per_module],
@@ -163,6 +189,7 @@ class PathDiscoveryModule(VulnerabilityModule):
         ctx.recon["wordlist_path_hits"] = list(
             ctx.recon.get("wordlist_path_hits", []) + sorted(wordlist_hits, key=lambda item: (item["status"], item["path"]))
         )
+        ctx.recon["soft404_filtered_paths"] = list(ctx.recon.get("soft404_filtered_paths", []) + filtered_soft)[:400]
         ctx.recon["discovered_paths"] = sorted(set(ctx.recon.get("discovered_paths", []) + discovered))[:500]
         ctx.recon["login_forms"] = sorted(set(ctx.recon.get("login_forms", []) + login_forms))[:50]
         return findings
@@ -220,7 +247,7 @@ class PathDiscoveryModule(VulnerabilityModule):
         url = urllib.parse.urljoin(ctx.target.url, path)
         for label, headers in self._bypass_headers(path):
             result = await ctx.http.request("GET", url, headers=headers, allow_redirects=False)
-            if self._bypass_success(result, original, soft_404):
+            if self._bypass_success(result, original, soft_404) and not await self._soft(ctx, url, result, path):
                 return Finding(
                     target=ctx.target.display,
                     category="Discovery",
@@ -237,12 +264,9 @@ class PathDiscoveryModule(VulnerabilityModule):
                     confidence="medium",
                 )
         for bypass_path in self._bypass_path_variants(path, ctx.wordlists.get("403bypass", [])):
-            result = await ctx.http.request(
-                "GET",
-                urllib.parse.urljoin(ctx.target.url, bypass_path),
-                allow_redirects=False,
-            )
-            if self._bypass_success(result, original, soft_404):
+            bypass_url = urllib.parse.urljoin(ctx.target.url, bypass_path)
+            result = await ctx.http.request("GET", bypass_url, allow_redirects=False)
+            if self._bypass_success(result, original, soft_404) and not await self._soft(ctx, bypass_url, result, bypass_path):
                 return Finding(
                     target=ctx.target.display,
                     category="Discovery",
@@ -259,6 +283,9 @@ class PathDiscoveryModule(VulnerabilityModule):
                     confidence="medium",
                 )
         return None
+
+    async def _soft(self, ctx: ScanContext, url: str, result: Any, path: str) -> str:
+        return await SoftNotFoundOracle.for_context(ctx).verdict(url, result, path)
 
     def _bypass_success(self, result: Any, original: Any, soft_404: Any) -> bool:
         if not result or result.status != 200:
@@ -314,9 +341,18 @@ class PathDiscoveryModule(VulnerabilityModule):
         baseline_title = self._title(baseline.text)
         return bool(result_title and baseline_title and result_title == baseline_title)
 
+    def _content_markers(self, body: str) -> list[str]:
+        lower = (body or "").lower()
+        return [marker for marker in self.SENSITIVE_CONTENT if marker.lower() in lower]
+
     def _has_sensitive_content(self, body: str) -> bool:
-        lower = body.lower()
-        return any(marker.lower() in lower for marker in self.SENSITIVE_CONTENT)
+        return bool(self._content_markers(body))
+
+    def _has_low_content(self, body: str) -> bool:
+        lower = (body or "")[:20000].lower()
+        if "<html" in lower[:500]:
+            return False
+        return any(marker.lower() in lower for marker in self.LOW_CONTENT)
 
     def _title(self, body: str) -> str:
         match = re.search(r"<title[^>]*>(.*?)</title>", body or "", re.IGNORECASE | re.DOTALL)
