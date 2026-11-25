@@ -14,7 +14,7 @@ class VersionConsistencyTests(unittest.TestCase):
         self.assertRegex(version, r"^\d+\.\d+\.\d+$")
 
         expected = {
-            "README.md": (rf"Version del motor:\*\* {re.escape(version)}\.",),
+            "README.md": (rf"Versi[oó]n del motor:\*\* {re.escape(version)}(?![\d.]*\d)",),
             "src/scan_titan/__init__.py": (rf'__version__ = "{re.escape(version)}-community"',),
             "src/scan_titan/Main.py": (
                 rf'SCAN_VERSION = "TITAN v{re.escape(version)} COMMUNITY ZERO-TOUCH"',

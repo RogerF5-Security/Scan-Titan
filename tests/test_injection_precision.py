@@ -81,8 +81,10 @@ class ReplayTests(MockCoroutineCase):
         result, ctx = await self.validate(f, lambda _m, url, **kw: response('SQLSTATE[42000] invalid query', 500) if '?' in url else response())
         self.assertEqual(result['state'], 'CONFIRMED')
         self.assertEqual(ctx.http.request.await_count, 3)
-        self.assertIn('baseline.body.txt', f.manual_command)
-        self.assertIn('probe.body.txt', f.manual_command)
+        # The replay prints both responses and the proof, not files to diff by hand.
+        self.assertIn("Write-Host '[baseline]'", f.manual_command)
+        self.assertIn("Write-Host '[probe]'", f.manual_command)
+        self.assertIn("Select-String -SimpleMatch 'SQLSTATE[42000]'", f.manual_command)
 
     async def test_preexisting_database_error_does_not_confirm(self):
         result, _ = await self.validate(finding(), lambda *a, **kw: response('SQLSTATE[42000] invalid query', 500))
@@ -224,7 +226,7 @@ class TriageTests(unittest.TestCase):
             model = Dashboard.construir_modelo(pd.DataFrame(columns=Dashboard.REPORT_COLUMNS))
         self.assertEqual(model['meta']['active'], 0)
         self.assertEqual(model['rows'][0]['state'], 'PENDING')
-        self.assertIn('baseline.body.txt', model['rows'][0]['manual_command'])
+        self.assertIn("Write-Host '[probe]'", model['rows'][0]['manual_command'])
 
     def test_scope_is_stable_but_does_not_hide_other_inputs(self):
         f = finding()

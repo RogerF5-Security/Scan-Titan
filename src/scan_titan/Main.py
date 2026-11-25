@@ -52,6 +52,7 @@ from modules.common import (
     SEVERITY_ORDER,
     Target,
     build_manual_command,
+    canonical_vulnerability_family,
     canonical_vulnerability_id,
     category_label_es,
     correlate_findings,
@@ -1002,7 +1003,7 @@ class PolicyEngine:
             "browser_audit",
         },
         "fuzzing": {"path_discovery", "recon_surface", "unauthenticated_map"},
-        "injections": {"sqli", "lfi", "ssrf", "injection", "xss", "client_side", "stored_xss"},
+        "injections": {"sqli", "lfi", "ssrf", "open_redirect", "injection", "xss", "client_side", "stored_xss"},
         "auth": {"auth_session", "authorization", "role_audit", "session_lifecycle"},
         "advanced": {"advanced_logic", "browser_audit", "race_conditions", "websocket_analyzer"},
     }
@@ -1899,6 +1900,21 @@ class WordlistLoader:
 
 
 
+def decode_tool_bytes(payload: bytes) -> str:
+    """Decode tool output without mojibake: UTF-8 first, then Windows-1252.
+
+    ZAP on Windows may answer in the platform code page without declaring a
+    charset; decoding that as UTF-8 with errors="replace" stored titles such as
+    "Exploraci�n de Directorios" and broke deduplication.
+    """
+    for encoding in ("utf-8", "cp1252"):
+        try:
+            return payload.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return payload.decode("utf-8", errors="replace")
+
+
 class StateStore:
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -1938,7 +1954,14 @@ class StateStore:
             record = dict(raw_record)
             asset = str(record.get("asset") or record.get("target") or "").strip()
             record["asset"] = asset
-            record["canonical_id"] = str(record.get("canonical_id") or canonical_vulnerability_id(record))
+            # Recompute identity with the current, language-independent families
+            # so ES/EN variants of one vulnerability collapse into one record.
+            view = {**record, "url": record.get("url") or record.get("last_url", "")}
+            legacy_id = str(record.get("canonical_id") or "")
+            record["canonical_id"] = canonical_vulnerability_id(view)
+            record["rule_id"] = canonical_vulnerability_family(view)
+            if legacy_id and legacy_id != record["canonical_id"]:
+                record["legacy_ids"] = list(dict.fromkeys([*(record.get("legacy_ids") or []), legacy_id]))
             sources = record.get("correlated_sources") or [record.get("source")]
             if isinstance(sources, str):
                 sources = [item.strip() for item in sources.split(",")]
@@ -1949,6 +1972,15 @@ class StateStore:
             if current is None:
                 migrated[fingerprint] = record
                 continue
+            if str(record.get("last_seen") or "") > str(current.get("last_seen") or ""):
+                # The newest observation decides state, wording and proof.
+                for key in ("state", "previous_state", "state_changed_at", "title", "last_url", "last_evidence",
+                            "validation", "confidence", "evidence_strength", "false_positive_risk", "source",
+                            "manual_command", "category"):
+                    if key in record:
+                        current[key] = record[key]
+            current["legacy_ids"] = list(dict.fromkeys([*(current.get("legacy_ids") or []),
+                                                         *(record.get("legacy_ids") or [])]))
             current["first_seen"] = min(
                 value for value in [str(current.get("first_seen") or ""), str(record.get("first_seen") or "")] if value
             ) if current.get("first_seen") or record.get("first_seen") else ""
@@ -2005,6 +2037,7 @@ class StateStore:
                 "target": finding.target,
                 "asset": finding.asset or scanned_target,
                 "canonical_id": finding.canonical_id,
+                "rule_id": canonical_vulnerability_family(finding),
                 "correlated_sources": finding.correlated_sources,
                 "category": finding.category,
                 "severity": finding.severity,
@@ -3879,7 +3912,8 @@ class ExternalTools:
             async with session.get(url, params=query, headers=headers, allow_redirects=False) as response:
                 if response.status != 200:
                     raise RuntimeError(f"ZAP API returned HTTP {response.status}; redirects are disabled")
-                text = await response.text(errors="replace")
+                reader = getattr(response, "read", None)
+                text = decode_tool_bytes(await reader()) if reader else await response.text(errors="replace")
         try:
             data = json.loads(text or "{}")
         except json.JSONDecodeError:

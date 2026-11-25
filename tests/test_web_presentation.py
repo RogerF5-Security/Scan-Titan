@@ -61,8 +61,10 @@ class PublicWebsiteTests(unittest.TestCase):
         page = Page((WEB / "index.html").read_text(encoding="utf-8"))
         for tag, attrs in page.elements:
             if attrs.get("role") == "tab":
-                self.assertIn(attrs["aria-controls"], page.ids)
+                self.assertIn(attrs["id"].replace("tab-", "panel-"), page.ids)
                 self.assertIn(attrs["aria-selected"], {"true", "false"})
+            if attrs.get("role") == "tabpanel":
+                self.assertIn(attrs["aria-labelledby"], page.ids)
             if tag == "img":
                 self.assertIn("alt", attrs)
                 self.assertIn("width", attrs)
@@ -74,16 +76,23 @@ class PublicWebsiteTests(unittest.TestCase):
         self.assertIn("<script>", index)
         self.assertNotIn('rel="stylesheet"', index)
         self.assertNotIn('src="app.js"', index)
-        for section_id in ("inicio", "motor", "capacidades", "operar", "origen", "futuro", "comunidad"):
+        for section_id in ("inicio", "que-hace", "como-funciona", "precision", "daily", "motores", "uso", "limites"):
             self.assertIn(f'id="{section_id}"', index)
-        for phrase in ("Vulnerability Scanner", "Open Source", "Nmap", "Nuclei", "Daily Dashboard", "Scan Ragnarok", "Pull Request"):
+        for phrase in ("Vulnerability Scanner", "Nmap", "Nuclei", "Daily Report", "Por validar", "soft-404",
+                       "validación diferencial"):
             self.assertIn(phrase.casefold(), index.casefold())
+        # Informative site: no community call-to-action or teaser sections.
+        for removed in ("comunidad", "community", "pull request", "ragnarok"):
+            self.assertNotIn(removed, index.casefold())
         self.assertIn("IntersectionObserver", index)
         self.assertIn("prefers-reduced-motion", index)
         for output in ("Daily_vulns_report.html", "Formal_Audit_Report_Latest.html", "Recon_Matrix.xlsx", "External_Tools_Observability.html"):
             self.assertIn(output, index)
         for command in ("python main.py --health-check", "python main.py --full", "python main.py --monitor", "python main.py --dashboard"):
             self.assertIn(command, index)
+        for screenshot in ("daily-resumen.png", "daily-evolucion.png", "daily-comparar.png", "daily-vulnerabilidades.png",
+                           "daily-hallazgos.png", "daily-detalle.png"):
+            self.assertIn(f"media/{screenshot}", index)
 
     def test_toolchain_and_wordlist_inventory_are_visible(self):
         index = (WEB / "index.html").read_text(encoding="utf-8")

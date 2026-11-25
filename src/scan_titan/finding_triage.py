@@ -13,7 +13,18 @@ def value(item, name, default=""):
     return (item.get(name, default) if isinstance(item, dict) else getattr(item, name, default)) or default
 
 
+HARDENING_MARKERS = ("csp", "content-security-policy", "content security policy", "header", "cabecera",
+                     "x-frame-options", "hsts", "strict-transport", "cookie", "x-content-type", "referrer-policy",
+                     "permissions-policy", "cache-control", "sub resource integrity", "subresource integrity")
+
+
 def injection_family(item) -> str:
+    title = str(value(item, "title")).lower()
+    category = str(value(item, "category")).lower()
+    # Missing hardening headers carry CWE-79/1021 because they weaken XSS
+    # defences; they are configuration findings, not injections to replay.
+    if category in {"headers", "cabeceras"} or any(marker in title for marker in HARDENING_MARKERS):
+        return ""
     text = " ".join(str(value(item, key)) for key in ("category", "title", "cwe")).lower()
     text = text.replace('x-xss-protection', '')
     if any(x in text for x in ("xss", "cross site scripting", "cross-site scripting", "cwe-79")):

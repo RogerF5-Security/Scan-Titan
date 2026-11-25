@@ -22,11 +22,13 @@ Las acciones estan fijadas a commits concretos y el artefacto incluye solo `docs
 
 1. Editar los archivos en `docs/web/` y mantener el idioma espanol.
 2. Ejecutar `python -B -m unittest discover -s tests -p test_web_presentation.py -v`.
-3. Revisar las vistas movil/escritorio, las pestanas, el mapa y la copia de comandos.
+3. Revisar las vistas movil/escritorio, el menu, las pestanas de la galeria del Daily y la ampliacion de capturas.
 4. Sincronizar `docs/web/` y sus pruebas al repositorio Scan-Titan y publicar el commit.
 5. Comprobar el flujo de Pages en GitHub Actions y la URL publica antes de dar el despliegue por terminado.
 
-El flujo de Pages empaqueta exclusivamente `docs/web/`. Nunca ampliar el artefacto a la raiz del escaner, reportes, diccionarios, configuraciones privadas ni objetivos. Las imagenes de esta web son ejemplos sinteticos con dominios reservados, no evidencias reales.
+El flujo de Pages empaqueta exclusivamente `docs/web/`. Nunca ampliar el artefacto a la raiz del escaner, reportes, diccionarios, configuraciones privadas ni objetivos. Las imagenes de esta web son ejemplos sinteticos con dominios reservados (`*.example`, 198.51.100.0/24), no evidencias reales. Las capturas del Daily se generan con un conjunto de reportes ficticios, nunca con `audit_reports` de una auditoria.
+
+La web es informativa: explica que hace la herramienta, como funciona cada etapa, como controla los falsos positivos, el Daily Report, los motores, la instalacion y los limites.
 
 La guia incluye descarga y preparacion para Windows y Linux. Los cambios del instalador o de los comandos deben reflejarse tambien en la web.
 

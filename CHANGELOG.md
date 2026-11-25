@@ -1,3 +1,30 @@
+## Unreleased — Web informativa, README y comandos del Daily (2026-11-24)
+
+- Web pública reescrita como sitio informativo: qué hace, pipeline en seis etapas, control de falsos positivos, Daily Report con galería por pestañas y ampliación de capturas, motores y módulos, instalación, salidas y límites. Se retiran las secciones de llamada a la comunidad y de proyectos futuros.
+- README reorganizado con el funcionamiento por etapas, criterios de precisión, Daily histórico y comandos de verificación; capturas nuevas en `assets/daily/` generadas con datos ficticios (`*.example`, 198.51.100.0/24).
+- Daily: en inyecciones confirmadas el comando de verificación conserva la prueba literal (`Select-String`) y ya no se rotula como "pendiente de validación"; las alertas históricas sin validación mantienen la comparación control/prueba.
+
+## Unreleased — Daily histórico y comparativo (2026-11-24)
+
+- Daily: pestañas Evolución (vigentes por severidad, nuevas/resueltas con cambio neto, registro por fecha con variación y detalle de qué apareció y qué se resolvió, tendencia y variación por objetivo, mapa de calor objetivo × fecha, antigüedad y reincidencia; periodos 7/30/90 días o todo), Comparar fechas (dos fechas cualesquiera: vigentes, nuevas, resueltas y persistentes por severidad y objetivo) y Vulnerabilidades (catálogo agrupado por tipo con objetivos, casos, prueba y tendencia). Logo de Scan Titan embebido (PNG reducido, sin dependencias externas).
+- Histórico fiable (`daily_history.py`): cada fecha usa el último escaneo de cada objetivo (un objetivo no escaneado no cuenta como resuelto), conserva el último estado observado cuando el objetivo no responde HTTP, recalcula la identidad canónica y aplica las reglas de calidad a reportes antiguos.
+- Identidad: las cookies se identifican por servicio y nombre de cookie, no por la URL donde el crawler las vio; elimina la rotación falsa de nuevas/resueltas entre escaneos.
+
+## Unreleased — Cobertura medida, identidad estable y Daily por pestañas (2026-11-23)
+
+- Laboratorio de verdad base `tools/vuln_lab.py` (solo 127.0.0.1): aplicación con 12 vulnerabilidades reales, controles negativos (misma funcionalidad segura) y señuelos de falso positivo (catch-all, WAF 403); ejecuta el pipeline completo aislado, mide cobertura y falsos positivos y ejecuta cada `manual_command` en PowerShell comprobando la prueba. Resultado: 12/12, 0 falsos positivos, 17/17 comandos reproducen la prueba (antes 5/11).
+- Rutas: `path_discovery` prueba primero ~90 rutas de alto valor (`.env`, `.git`, backups, actuator, phpinfo, swagger...) y luego entradas con marcadores sensibles; antes la wordlist alfabética de 1,6 M líneas se truncaba al presupuesto y esas rutas no se probaban. Se descartan líneas basura de listas públicas.
+- Listados de directorio: detección genérica (Apache, Nginx, IIS, Python, Tomcat) en directorios descubiertos y comunes, con firma de índice y oráculo soft-404.
+- Redirección abierta: módulo nuevo `open_redirect` con control del mismo sitio, host externo único, `Location`/`Refresh`/meta refresh y repetición 2/2.
+- XSS: si el payload del detector no corresponde al contexto (atributo reflejado como texto), el validador prueba payloads por contexto y confirma solo con un elemento ejecutable parseado y repetido.
+- CORS: también sobre endpoints de API descubiertos (incluido JavaScript) con origen único por ejecución; `*` con credenciales pasa a Low (los navegadores lo rechazan).
+- Cabeceras: CSP ausente y similares ya no se tratan como inyecciones (antes se ocultaban como candidatos por su CWE-79).
+- Identidad y deduplicación: familias canónicas en español/inglés, sin acentos ni mojibake, con título antes que evidencia; vulners agrupado por producto CPE y resumen de versiones estable ante actualizaciones del catálogo; migración del estado que fusiona duplicados conservando la observación más reciente y guarda `rule_id` y `legacy_ids`. ZAP se decodifica UTF-8/cp1252 (antes "Exploraci�n").
+- OWASP 2025: el CWE del hallazgo prevalece sobre etiquetas persistidas (CWE-601 → A01, no A04) y se añadieron CWE frecuentes.
+- Comandos de verificación: Nmap relanza el script NSE exacto en su puerto; Nuclei usa `host:puerto` y `-pt` en plantillas de red; rutas/logs/listados incluyen una ruta inexistente de control; las inyecciones imprimen estado, líneas con la prueba y tiempo en lugar de solo guardar archivos.
+- Daily: plantilla única `daily_report.py` (sustituye la plantilla en línea y dos capas de parches) con pestañas Resumen, Hallazgos, Por validar, Objetivos, Tendencias, Cobertura y Reconocimiento; estadísticas por severidad, calidad de evidencia, categoría, motor, OWASP, antigüedad, reincidencia y altas/cierres; tabla ordenable y filtrable, detalle en `<dialog>` con copia del comando, tema claro/oscuro, móvil y CSP estricta.
+- Publicación: `tools/leak_gate.py` bloquea hosts de clientes (de `targets.txt`, nombres en `audit_reports` y `config/leak_denylist.local.txt`), claves, tokens, rutas de usuario y correos antes de publicar.
+
 ## Unreleased — Control de falsos positivos (2026-11-20)
 
 - Rutas: oraculo soft-404 compartido (`modules/soft_not_found.py`) por origen, directorio padre y extension; compara estado, redireccion y cuerpo normalizado (sin reflejos de la ruta ni tokens volatiles). Antes habia una sola linea base sin extension y comparada solo por titulo, por lo que SPA catch-all, paginas de debug 404 y bloqueos WAF 403 por extension se reportaban como rutas.

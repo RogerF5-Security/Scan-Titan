@@ -53,6 +53,27 @@ class PathDiscoveryModule(VulnerabilityModule):
         "/metrics",
     ]
 
+    # Always tested first. The route wordlist has 1.6M alphabetical lines and is
+    # truncated to the module budget, which used to drop every high-value path.
+    HIGH_VALUE_PATHS = [
+        "/.env", "/.env.local", "/.env.production", "/.env.backup", "/.env.bak", "/.env.old", "/.env.example",
+        "/.git/HEAD", "/.git/config", "/.git/index", "/.gitignore", "/.svn/entries", "/.svn/wc.db", "/.hg/hgrc",
+        "/.DS_Store", "/.htaccess", "/.htpasswd", "/.npmrc", "/.dockercfg", "/.docker/config.json",
+        "/.aws/credentials", "/.ssh/id_rsa", "/id_rsa", "/.bash_history",
+        "/config.php.bak", "/wp-config.php.bak", "/wp-config.php~", "/wp-config.old", "/configuration.php.bak",
+        "/config.json", "/config.yml", "/config.yaml", "/settings.py", "/application.properties",
+        "/application.yml", "/appsettings.Development.json", "/web.config.bak", "/database.yml",
+        "/backup.sql", "/dump.sql", "/database.sql", "/db.sql", "/backup.tar", "/site.zip", "/www.zip",
+        "/phpinfo.php", "/info.php", "/test.php", "/server-info", "/server-status",
+        "/actuator/env", "/actuator/heapdump", "/actuator/configprops", "/actuator/mappings", "/actuator/health",
+        "/env", "/trace", "/heapdump", "/jolokia", "/metrics", "/debug/vars", "/debug/pprof/",
+        "/elmah.axd", "/trace.axd", "/_profiler/phpinfo", "/telescope", "/horizon", "/__debug__/",
+        "/swagger-ui.html", "/swagger/index.html", "/v2/api-docs", "/v3/api-docs", "/api-docs",
+        "/graphiql", "/console", "/h2-console", "/adminer.php", "/phpmyadmin/", "/storage/logs/laravel.log",
+        "/crossdomain.xml", "/clientaccesspolicy.xml", "/sitemap.xml", "/robots.txt", "/security.txt",
+        "/.well-known/security.txt",
+    ]
+
     SENSITIVE_MARKERS = {
         ".env",
         ".git",
@@ -89,12 +110,7 @@ class PathDiscoveryModule(VulnerabilityModule):
 
     async def run(self, ctx: ScanContext) -> list[Finding]:
         raw_paths = ctx.wordlists.get("rutas") or self.DEFAULT_PATHS
-        paths = list(
-            dict.fromkeys(
-                [self._normalize_path(p) for p in raw_paths[: ctx.limits.max_tests_per_module]]
-                + self.DEFAULT_PATHS
-            )
-        )
+        paths = self._prioritized_paths(raw_paths, ctx.limits.max_tests_per_module)
         findings: list[Finding] = []
         discovered: list[str] = []
         login_forms: list[str] = []
@@ -179,7 +195,7 @@ class PathDiscoveryModule(VulnerabilityModule):
                     findings.append(bypass)
 
         await run_bounded(
-            paths[:ctx.limits.max_tests_per_module],
+            paths,  # already prioritized and bounded by _prioritized_paths
             probe,
             limit=12,
             should_stop=ctx.should_stop,
@@ -189,10 +205,67 @@ class PathDiscoveryModule(VulnerabilityModule):
         ctx.recon["wordlist_path_hits"] = list(
             ctx.recon.get("wordlist_path_hits", []) + sorted(wordlist_hits, key=lambda item: (item["status"], item["path"]))
         )
+        findings.extend(await self._directory_listings(ctx, oracle))
         ctx.recon["soft404_filtered_paths"] = list(ctx.recon.get("soft404_filtered_paths", []) + filtered_soft)[:400]
         ctx.recon["discovered_paths"] = sorted(set(ctx.recon.get("discovered_paths", []) + discovered))[:500]
         ctx.recon["login_forms"] = sorted(set(ctx.recon.get("login_forms", []) + login_forms))[:50]
         return findings
+
+    LISTING_DIRS = ["/static/", "/uploads/", "/upload/", "/files/", "/images/", "/img/", "/assets/", "/media/",
+                    "/backup/", "/backups/", "/logs/", "/log/", "/tmp/", "/temp/", "/public/", "/download/",
+                    "/downloads/", "/data/", "/docs/", "/export/", "/reports/", "/storage/"]
+    LISTING_SIGNATURES = re.compile(
+        r"<title>\s*index of /|<h1>\s*index of /|directory listing for /|\[to parent directory\]|"
+        r"<a href=\"\?C=N;O=D\">|>parent directory</a>", re.IGNORECASE)
+
+    async def _directory_listings(self, ctx: ScanContext, oracle: SoftNotFoundOracle) -> list[Finding]:
+        """Directories that answer with a real index page (Apache, Nginx, IIS, Python, Tomcat)."""
+        origin = urllib.parse.urlsplit(ctx.target.url)
+        dirs: list[str] = []
+        urls = [item.get("url", "") for item in ctx.recon.get("endpoints", []) if isinstance(item, dict)]
+        urls += [str(item) for item in ctx.recon.get("urls", []) or [] if isinstance(item, str)]
+        for url in urls:
+            parsed = urllib.parse.urlsplit(url)
+            if (parsed.scheme, parsed.netloc) != (origin.scheme, origin.netloc):
+                continue
+            path = parsed.path or "/"
+            dirs.append(path if path.endswith("/") else path.rsplit("/", 1)[0] + "/")
+        candidates = [d for d in dict.fromkeys(dirs + self.LISTING_DIRS) if d != "/"][:40]
+        findings: list[Finding] = []
+        for directory in candidates:
+            if ctx.should_stop():
+                break
+            url = urllib.parse.urljoin(ctx.target.url, directory)
+            result = await ctx.http.request("GET", url, allow_redirects=False)
+            if not result or result.status != 200 or not self.LISTING_SIGNATURES.search(result.text[:20000]):
+                continue
+            if await oracle.verdict(url, result, directory):
+                continue
+            entries = re.findall(r'href="([^"?#/][^"?#]*)"', result.text[:20000])[:8]
+            findings.append(Finding(
+                target=ctx.target.display, category="Discovery", severity="Medium",
+                title=f"Directory listing enabled: {directory}", url=url, endpoint=directory, method="GET",
+                status=str(result.status), size=f"{result.body_len}b",
+                evidence=f"Indice del servidor con entradas: {', '.join(entries) or '-'}",
+                source=self.name, confidence="high", evidence_strength="strong", false_positive_risk="low",
+                cwe="CWE-548",
+            ))
+        return findings
+
+    def _prioritized_paths(self, raw_paths: list[str], budget: int) -> list[str]:
+        """High-value paths first, then wordlist entries with sensitive markers, then the rest."""
+        budget = max(1, int(budget or 1))
+        curated = [self._normalize_path(p) for p in self.HIGH_VALUE_PATHS + self.DEFAULT_PATHS]
+        sensitive, ordinary = [], []
+        for raw in raw_paths:
+            value = str(raw or "").strip()
+            if not value or value.startswith("#") or any(ch in value for ch in "\"<>{}|^`$!*'"):
+                continue  # junk lines of public lists ("! Game title", "$100_laptop", quoted JSON...)
+            path = self._normalize_path(value)
+            (sensitive if any(marker in path.lower() for marker in self.SENSITIVE_MARKERS) else ordinary).append(path)
+            if len(sensitive) + len(ordinary) >= budget * 3:
+                break
+        return list(dict.fromkeys(curated + sensitive + ordinary))[:max(budget, len(curated))]
 
     def _normalize_path(self, value: str) -> str:
         path = "/" + str(value or "").strip().lstrip("/")

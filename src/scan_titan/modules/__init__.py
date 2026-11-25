@@ -19,6 +19,7 @@ from .status_route_filter import StatusRouteFilterModule
 from .unauthenticated_map import UnauthenticatedMapModule
 from .sqli import SqliModule
 from .ssrf import SsrfModule
+from .open_redirect import OpenRedirectModule
 from .waf_resilience import WafResilienceModule
 from .xss import XssModule
 from .role_audit import RoleAuditor
@@ -45,6 +46,7 @@ DEFAULT_MODULES = [
     SqliModule,
     LfiModule,
     SsrfModule,
+    OpenRedirectModule,
     InjectionModule,
     XssModule,
     CorsModule,

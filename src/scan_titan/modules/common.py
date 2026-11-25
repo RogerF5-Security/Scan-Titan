@@ -5,6 +5,7 @@ import hashlib
 import random
 import re
 import time
+import unicodedata
 import urllib.parse
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -419,7 +420,10 @@ def _finding_value(finding: Any, name: str, default: Any = "") -> Any:
 
 
 def _identity_text(value: Any) -> str:
-    text = str(value or "").lower()
+    # Accent- and mojibake-insensitive so "Exploración", "Exploracion" and a
+    # mis-decoded "Exploraci�n" resolve to the same family.
+    text = unicodedata.normalize("NFKD", str(value or "").replace("�", ""))
+    text = "".join(char for char in text if not unicodedata.combining(char)).lower()
     text = re.sub(r"https?://[^\s|]+", " ", text)
     text = re.sub(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", " ", text)
     text = re.sub(r"\s+", " ", text)
@@ -436,6 +440,17 @@ def finding_cves(finding: Any) -> list[str]:
 
 def canonical_vulnerability_family(finding: Any) -> str:
     """Return a source-independent vulnerability family for correlation."""
+    title_text = _identity_text(_finding_value(finding, "title", ""))
+    sources = " ".join(str(item) for item in (_finding_value(finding, "correlated_sources", None) or []))
+    sources = f"{sources} {_finding_value(finding, 'source', '') or ''}".lower()
+    # Version correlations list many CVEs that change with every catalog
+    # update; keying them by CVE list would mint a "new" finding each time.
+    if "nmap:vulners" in sources or "cves potenciales inferidos" in title_text or "potential cves inferred" in title_text:
+        evidence = " ".join(str(_finding_value(finding, key, "") or "") for key in ("evidence", "last_evidence", "details"))
+        cpe = re.search(r"cpe:/[aho]:([a-z0-9_.-]+):([a-z0-9_.-]+)", evidence.lower())
+        return "vulners-version-correlation" + (f":{cpe.group(1)}:{cpe.group(2)}" if cpe else "")
+    if title_text.startswith("componente con avisos de seguridad publicados"):
+        return "component-advisories"
     cves = finding_cves(finding)
     if cves:
         return "cve:" + ",".join(cves)
@@ -447,40 +462,59 @@ def canonical_vulnerability_family(finding: Any) -> str:
         )
     )
     rules: list[tuple[str, tuple[str, ...]]] = [
-        ("cors-arbitrary-origin", ("cors reflects arbitrary", "arbitrary origin", "origin reflejado", "wildcard origin", "cross-domain misconfiguration", "cors misconfiguration")),
+        ("cors-arbitrary-origin", ("cors reflects arbitrary", "arbitrary origin", "origin reflejado", "origen arbitrario", "wildcard origin", "cross-domain misconfiguration", "cors misconfiguration")),
         ("hsts-missing", ("hsts missing", "strict-transport-security header no", "strict transport security missing", "strict-transport-security header not set", "hsts ausente")),
-        ("csp-missing", ("csp missing", "content security policy (csp) no configurada", "content-security-policy missing", "content security policy (csp) header not set", "cabecera content security policy")),
-        ("csp-weak", ("csp: style-src unsafe-inline", "unsafe-inline", "unsafe-eval", "csp weak", "csp debil")),
-        ("clickjacking-protection-missing", ("clickjacking", "x-frame-options missing", "x-frame-options header not set", "frame-ancestors missing")),
+        ("csp-weak", ("csp: style-src unsafe-inline", "unsafe-inline", "unsafe-eval", "csp weak", "csp debil", "csp contiene primitivas", "csp sin directivas", "failure to define directive", "csp: wildcard directive", "csp: script-src", "csp: notices")),
+        ("csp-missing", ("csp missing", "csp ausente", "content security policy (csp) no configurada", "content-security-policy missing", "content security policy (csp) header not set", "cabecera content security policy")),
+        ("clickjacking-protection-missing", ("clickjacking", "x-frame-options missing", "x-frame-options ausente", "x-frame-options header not set", "frame-ancestors missing", "anti-clickjacking")),
         ("x-content-type-options-missing", ("x-content-type-options", "mime sniffing")),
         ("referrer-policy-missing", ("referrer-policy", "referrer policy")),
         ("permissions-policy-missing", ("permissions-policy", "feature-policy")),
-        ("cookie-secure-missing", ("cookie secure", "secure flag missing", "cookie without secure")),
-        ("cookie-httponly-missing", ("cookie httponly", "httponly flag missing", "cookie without httponly")),
-        ("cookie-samesite-missing", ("cookie samesite", "samesite attribute", "missing-cookie-samesite")),
-        ("sql-injection", ("sql injection", "sqli", "inyeccion sql", "inyección sql")),
-        ("command-injection", ("command injection", "os command", "inyeccion de comandos", "inyección de comandos")),
+        ("cache-control-weak", ("cache-control",)),
+        ("cookie-security-flags-missing", ("cookie missing security flags", "cookie sin flags de seguridad", "cookie sin atributos de seguridad")),
+        ("cookie-secure-missing", ("cookie secure", "secure flag missing", "cookie without secure", "cookie sin el atributo secure", "cookie sin flag secure")),
+        ("cookie-httponly-missing", ("cookie httponly", "httponly flag missing", "cookie without httponly", "no httponly flag", "cookie sin httponly")),
+        ("cookie-samesite-weak", ("cookie samesite", "samesite attribute", "atributo samesite", "missing-cookie-samesite")),
+        ("tls-certificate-expired", ("expired ssl certificate", "certificado ssl expirado", "certificado tls expirado", "certificate expired")),
+        ("tls-certificate-untrusted", ("tls certificate validation failed", "validacion de certificado tls fallida", "self signed ssl certificate", "self-signed", "certificado ssl autofirmado", "certificado autofirmado")),
+        ("sql-injection", ("sql injection", "sqli", "inyeccion sql")),
+        ("command-injection", ("command injection", "os command", "inyeccion de comandos")),
         ("server-side-template-injection", ("ssti", "template injection")),
         ("cross-site-scripting", ("cross-site scripting", "cross site scripting", " xss", "xss ")),
         ("server-side-request-forgery", ("server-side request forgery", " ssrf", "ssrf ")),
         ("path-traversal-lfi", ("path traversal", "directory traversal", "local file inclusion", " lfi", "lfi ")),
-        ("open-redirect", ("open redirect", "external redirect", "redireccion abierta", "redirección abierta")),
-        ("authentication-bypass", ("authentication bypass", "auth bypass", "bypass de autenticacion", "bypass de autenticación")),
-        ("broken-object-authorization", ("idor", "bola", "object authorization", "autorizacion por objeto", "autorización por objeto")),
+        ("open-redirect", ("open redirect", "external redirect", "redireccion abierta", "redireccion externa", "redirecci&&extern")),
+        ("authentication-bypass", ("authentication bypass", "auth bypass", "bypass de autenticacion")),
+        ("broken-object-authorization", ("idor", "bola", "object authorization", "autorizacion por objeto")),
         ("csrf", ("cross-site request forgery", "csrf")),
         ("rate-limit-missing", ("rate limit", "rate-limit", "unlimited requests")),
-        ("directory-listing", ("directory listing", "directory index", "listado de directorio")),
+        ("directory-listing", ("directory listing", "directory index", "listado de directorio", "directory browsing", "exploracion de directorios", "exploraci&&directorios")),
+        ("subresource-integrity-missing", ("sub resource integrity", "subresource integrity", "integridad de subrecurso")),
+        ("cross-domain-script-inclusion", ("cross-domain javascript source file inclusion", "inclusion de archivos fuente javascript", "inclusion de javascript de dominio cruzado")),
+        ("vulnerable-js-library", ("vulnerable js library", "librer&&js vulnerable", "biblioteca js vulnerable")),
+        ("in-page-banner-leak", ("in page banner information leak", "banner de la pagina", "fuga de informaci&&banner")),
+        ("application-error-disclosure", ("application error disclosure", "divulgaci&&error de aplicaci", "divulgacion de error")),
+        ("framework-debug-enabled", ("django debug configuration", "debug mode enabled", "laravel debug mode", "werkzeug debugger", "symfony profiler", "debug toolbar")),
+        ("log-file-exposure", ("exposed log/debug content", "contenido de log/debug expuesto", "log expuesto")),
         ("git-exposure", ("/.git", "http-git", "git repository exposure")),
         ("environment-file-exposure", ("/.env", "environment file exposure")),
         ("backup-file-exposure", ("backup file", "backup exposure", "archivo de respaldo")),
         ("weak-tls-protocol", ("sslv2", "sslv3", "tls 1.0", "tls 1.1", "weak tls protocol")),
-        ("weak-tls-cipher", ("weak cipher", "cifrados debiles", "cifrados débiles", "anonymous cipher", "export cipher")),
+        ("weak-tls-cipher", ("weak cipher", "cifrados debiles", "anonymous cipher", "export cipher")),
         ("heartbleed", ("heartbleed",)),
         ("poodle", ("poodle",)),
         ("ms17-010", ("ms17-010", "eternalblue")),
     ]
+    def matches(text: str, markers: tuple[str, ...]) -> bool:
+        return any(all(part in text for part in marker.split("&&")) for marker in markers)
+
+    # Title first: evidence often quotes unrelated headers (Cache-Control,
+    # X-Content-Type-Options...), which used to misfile a finding's family.
     for family, markers in rules:
-        if any(marker in haystack for marker in markers):
+        if matches(title_text, markers):
+            return family
+    for family, markers in rules:
+        if matches(haystack, markers):
             return family
 
     title = _identity_text(_finding_value(finding, "title", "finding"))
@@ -501,12 +535,22 @@ SERVICE_SCOPED_FAMILIES = {
     "x-content-type-options-missing",
     "referrer-policy-missing",
     "permissions-policy-missing",
+    "subresource-integrity-missing",
+    "framework-debug-enabled",
+    "vulners-version-correlation",
+    "cross-domain-script-inclusion",
+    "tls-certificate-expired",
+    "tls-certificate-untrusted",
     "weak-tls-protocol",
     "weak-tls-cipher",
     "heartbleed",
     "poodle",
     "ms17-010",
 }
+
+
+COOKIE_FAMILIES = {"cookie-samesite-weak", "cookie-httponly-missing", "cookie-secure-missing",
+                   "cookie-security-flags-missing"}
 
 
 def canonical_vulnerability_id(finding: Any) -> str:
@@ -520,13 +564,24 @@ def canonical_vulnerability_id(finding: Any) -> str:
         endpoint_port = re.search(r"\b(\d{1,5})(?:/(?:tcp|udp))?\b", endpoint, flags=re.IGNORECASE)
         port = endpoint_port.group(1) if endpoint_port else ""
     path = parsed.path or (endpoint if endpoint.startswith("/") else "")
-    if family in SERVICE_SCOPED_FAMILIES or family.startswith("cve:"):
+    service_scoped = (family in SERVICE_SCOPED_FAMILIES or family.startswith(("cve:", "vulners-version-correlation")))
+    if family in COOKIE_FAMILIES:
+        # A cookie flag issue belongs to the cookie on that service, not to the
+        # URL where a crawler happened to see it (ZAP reports a different URL
+        # each run, which minted a "new" finding every scan).
+        cookie = str(_finding_value(finding, "param", "") or "").strip().lower()
+        if not cookie:
+            match = re.search(r"cookie[^:]*:\s*([A-Za-z0-9_.-]+)", str(_finding_value(finding, "title", "")), re.I)
+            cookie = match.group(1).lower() if match else ""
+        material = "|".join([family, f"port:{port or 'service'}", cookie])
+        return "STV-" + hashlib.sha256(material.encode("utf-8", errors="ignore")).hexdigest()[:12].upper()
+    if service_scoped:
         location = f"port:{port or endpoint or 'service'}"
     else:
         location = path.rstrip("/") or endpoint or "/"
     method = str(_finding_value(finding, "method", "") or "").upper()
     param = str(_finding_value(finding, "param", "") or "").strip().lower()
-    if family in SERVICE_SCOPED_FAMILIES or family.startswith("cve:"):
+    if service_scoped:
         method = ""
         param = ""
     material = "|".join([family, str(location).lower(), method, param])
@@ -675,7 +730,16 @@ def build_manual_command(finding: Any) -> str:
 
     if source.startswith("nmap") or "external/nmap" in category.lower():
         host = urllib.parse.urlparse(url).hostname if url else ""
-        host = host or target
+        host = host or urllib.parse.urlparse(target).hostname or target
+        port_match = re.search(r"\b(\d{1,5})/(tcp|udp)\b", f"{endpoint} {title} {getattr(finding, 'evidence', '')}",
+                               re.IGNORECASE)
+        exact = source.split(":", 1)[1].strip() if ":" in source else ""
+        if re.fullmatch(r"[a-z0-9][a-z0-9_.-]{1,80}", exact or "", re.IGNORECASE) and exact not in {"vulners"}:
+            # Re-run exactly the NSE script that produced the finding, on its port.
+            udp = bool(port_match and port_match.group(2).lower() == "udp")
+            port_arg = f" -p {'U:' if udp else ''}{port_match.group(1)}" if port_match else ""
+            return (f"nmap {'-sU ' if udp else ''}-sV -Pn{port_arg} --script {powershell_quote(exact)} "
+                    f"--script-timeout 120s {powershell_quote(host)}")
         script = "vuln and safe"
         if "slowloris" in haystack:
             script = "http-slowloris-check"
@@ -699,12 +763,16 @@ def build_manual_command(finding: Any) -> str:
         template = source.split(":", 1)[1] if ":" in source else ""
         if not template and re.fullmatch(r"[a-z0-9][a-z0-9._-]{2,120}", endpoint, re.IGNORECASE):
             template = endpoint
-        base = url or target
-        if base and not base.startswith(("http://", "https://")):
+        base = url or (endpoint if re.fullmatch(r"[\w.-]+:\d{1,5}", endpoint or "") else "") or target
+        network = bool(re.fullmatch(r"[\w.\[\]:-]+:\d{1,5}", base or "")) and not base.startswith(("http://", "https://"))
+        if base and not network and not base.startswith(("http://", "https://")):
             base = f"https://{base}"
-        cmd = f"nuclei -u {powershell_quote(base)} -jsonl"
+        # Network/javascript templates take host:port; HTTP templates take the URL.
+        cmd = f"nuclei -u {powershell_quote(base)} -jsonl -duc -ni -nc"
         if template:
             cmd += f" -id {powershell_quote(template)}"
+        if network:
+            cmd += " -pt tcp,javascript,ssl"
         return cmd
 
     if not url:
@@ -723,6 +791,19 @@ def build_manual_command(finding: Any) -> str:
             parts.extend(["-H", powershell_quote(header)])
         parts.append(powershell_quote(value))
         return " ".join(parts)
+
+    lower_title = title.lower()
+    if (lower_title.startswith(("exposed or restricted path:", "exposed log/debug content:", "sensitive path discovered",
+                             "directory listing enabled:"))
+            and not payload):
+        # Prove the route exists: compare with a random path that has the same
+        # parent and extension (the soft-404 baseline the scanner used).
+        parsed = urllib.parse.urlsplit(url)
+        parent, _, leaf = parsed.path.rpartition("/")
+        ext = "." + leaf.rsplit(".", 1)[1] if "." in leaf.strip(".") else ""
+        control = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, f"{parent}/scan-titan-404-control{ext}", "", ""))
+        return (f"Write-Host '[ruta inexistente de control]'; {curl_get(control)} | Select-Object -First 12; "
+                f"Write-Host '[ruta reportada]'; {curl_get(url)} | Select-Object -First 30")
 
     if "cors" in haystack:
         simple = curl_get(url, headers=["Origin: https://example.com"], metadata_only=True)

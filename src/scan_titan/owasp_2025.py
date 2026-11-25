@@ -102,6 +102,16 @@ CWE_TO_OWASP_2025 = {
     "CWE-1021": "A02",
     "CWE-1035": "A03",
     "CWE-1336": "A05",
+    "CWE-601": "A01",
+    "CWE-345": "A08",
+    "CWE-829": "A08",
+    "CWE-497": "A02",
+    "CWE-1004": "A07",
+    "CWE-1275": "A07",
+    "CWE-1104": "A03",
+    "CWE-1395": "A03",
+    "CWE-209": "A10",
+    "CWE-550": "A10",
 }
 
 TEXT_RULES = [
@@ -264,6 +274,12 @@ def normalize_owasp_2025(
     output: str = "spanish",
 ) -> str:
     haystack = _normalized(" ".join(map(str, [owasp, cwe, category, title, source, evidence, details])))
+    # The finding's own CWE is authoritative: it corrects labels persisted by
+    # earlier keyword guesses (e.g. an open redirect stored as A04 "crypto").
+    for cwe_id in re.findall(r"CWE-\d{1,5}", str(cwe or ""), flags=re.IGNORECASE):
+        code = CWE_TO_OWASP_2025.get(cwe_id.upper())
+        if code:
+            return _label(code, output)
     explicit_2025 = re.search(r"\bA(0[1-9]|10)\s*:\s*2025\b", str(owasp or ""), flags=re.IGNORECASE)
     if explicit_2025:
         return _label(f"A{explicit_2025.group(1)}", output)
