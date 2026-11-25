@@ -267,7 +267,7 @@ KNOWLEDGE_FILE = _path_from_env(
     "SCAN_TITAN_KNOWLEDGE_FILE",
     _first_existing(BASE_DIR / "data" / "scan_titan_knowledge.json", BASE_DIR / "scan_titan_knowledge.json"),
 )
-SCAN_VERSION = "TITAN v22.5.0 COMMUNITY ZERO-TOUCH"
+SCAN_VERSION = "TITAN v22.6.0 COMMUNITY ZERO-TOUCH"
 HEADER_SEPARATOR = "=" * 72
 REPORT_SEPARATOR = "─" * 72
 
@@ -770,7 +770,7 @@ class Console:
 {Fore.RED}  ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝       ╚═╝   ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝
 {Fore.YELLOW}        [ SCAN TITAN :: WALL-BREACH VULNERABILITY ENGINE ]
 {Fore.CYAN}        [ ZERO-TOUCH | RECON | DAST | NMAP | NUCLEI | EVIDENCE ]
-{Fore.MAGENTA}        [ SCAN TITAN COMMUNITY | TATAKAE | ⚔️ v22.5.0 ⚔️ ]
+{Fore.MAGENTA}        [ SCAN TITAN COMMUNITY | TATAKAE | ⚔️ v22.6.0 ⚔️ ]
 """
         )
 

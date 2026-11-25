@@ -1,16 +1,20 @@
-## Unreleased — Web informativa, README y comandos del Daily (2026-11-24)
+## [22.6.0] - 2026-11-24
+
+Precisión de detección, Daily histórico y web informativa. Notas completas en [docs/releases/v22.6.0.md](docs/releases/v22.6.0.md).
+
+### Web informativa, README y comandos del Daily (2026-11-24)
 
 - Web pública reescrita como sitio informativo: qué hace, pipeline en seis etapas, control de falsos positivos, Daily Report con galería por pestañas y ampliación de capturas, motores y módulos, instalación, salidas y límites. Se retiran las secciones de llamada a la comunidad y de proyectos futuros.
 - README reorganizado con el funcionamiento por etapas, criterios de precisión, Daily histórico y comandos de verificación; capturas nuevas en `assets/daily/` generadas con datos ficticios (`*.example`, 198.51.100.0/24).
 - Daily: en inyecciones confirmadas el comando de verificación conserva la prueba literal (`Select-String`) y ya no se rotula como "pendiente de validación"; las alertas históricas sin validación mantienen la comparación control/prueba.
 
-## Unreleased — Daily histórico y comparativo (2026-11-24)
+### Daily histórico y comparativo (2026-11-24)
 
 - Daily: pestañas Evolución (vigentes por severidad, nuevas/resueltas con cambio neto, registro por fecha con variación y detalle de qué apareció y qué se resolvió, tendencia y variación por objetivo, mapa de calor objetivo × fecha, antigüedad y reincidencia; periodos 7/30/90 días o todo), Comparar fechas (dos fechas cualesquiera: vigentes, nuevas, resueltas y persistentes por severidad y objetivo) y Vulnerabilidades (catálogo agrupado por tipo con objetivos, casos, prueba y tendencia). Logo de Scan Titan embebido (PNG reducido, sin dependencias externas).
 - Histórico fiable (`daily_history.py`): cada fecha usa el último escaneo de cada objetivo (un objetivo no escaneado no cuenta como resuelto), conserva el último estado observado cuando el objetivo no responde HTTP, recalcula la identidad canónica y aplica las reglas de calidad a reportes antiguos.
 - Identidad: las cookies se identifican por servicio y nombre de cookie, no por la URL donde el crawler las vio; elimina la rotación falsa de nuevas/resueltas entre escaneos.
 
-## Unreleased — Cobertura medida, identidad estable y Daily por pestañas (2026-11-23)
+### Cobertura medida, identidad estable y Daily por pestañas (2026-11-23)
 
 - Laboratorio de verdad base `tools/vuln_lab.py` (solo 127.0.0.1): aplicación con 12 vulnerabilidades reales, controles negativos (misma funcionalidad segura) y señuelos de falso positivo (catch-all, WAF 403); ejecuta el pipeline completo aislado, mide cobertura y falsos positivos y ejecuta cada `manual_command` en PowerShell comprobando la prueba. Resultado: 12/12, 0 falsos positivos, 17/17 comandos reproducen la prueba (antes 5/11).
 - Rutas: `path_discovery` prueba primero ~90 rutas de alto valor (`.env`, `.git`, backups, actuator, phpinfo, swagger...) y luego entradas con marcadores sensibles; antes la wordlist alfabética de 1,6 M líneas se truncaba al presupuesto y esas rutas no se probaban. Se descartan líneas basura de listas públicas.
@@ -25,7 +29,7 @@
 - Daily: plantilla única `daily_report.py` (sustituye la plantilla en línea y dos capas de parches) con pestañas Resumen, Hallazgos, Por validar, Objetivos, Tendencias, Cobertura y Reconocimiento; estadísticas por severidad, calidad de evidencia, categoría, motor, OWASP, antigüedad, reincidencia y altas/cierres; tabla ordenable y filtrable, detalle en `<dialog>` con copia del comando, tema claro/oscuro, móvil y CSP estricta.
 - Publicación: `tools/leak_gate.py` bloquea hosts de clientes (de `targets.txt`, nombres en `audit_reports` y `config/leak_denylist.local.txt`), claves, tokens, rutas de usuario y correos antes de publicar.
 
-## Unreleased — Control de falsos positivos (2026-11-20)
+### Control de falsos positivos (2026-11-20)
 
 - Rutas: oraculo soft-404 compartido (`modules/soft_not_found.py`) por origen, directorio padre y extension; compara estado, redireccion y cuerpo normalizado (sin reflejos de la ruta ni tokens volatiles). Antes habia una sola linea base sin extension y comparada solo por titulo, por lo que SPA catch-all, paginas de debug 404 y bloqueos WAF 403 por extension se reportaban como rutas.
 - Rutas: un hallazgo exige contenido probatorio en el cuerpo (`.env`, `.git`, claves, actuator, phpinfo, listado). Un 401/403 o un nombre "sensible" sin contenido queda en recon; manifiestos de dependencias/API como Low. El bypass 403 tambien debe distinguirse de una ruta inexistente.

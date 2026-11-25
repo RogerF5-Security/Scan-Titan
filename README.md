@@ -4,7 +4,7 @@
 
 Escáner de vulnerabilidades en Python para Windows y Linux. Reconoce la superficie de un objetivo autorizado y ejecuta pruebas propias junto con Nmap, Nuclei, OWASP ZAP y otras herramientas. Después valida cada hallazgo con controles comparativos y entrega evidencia reproducible. Mantiene además un histórico para comparar cómo evolucionan las vulnerabilidades en el tiempo.
 
-**Versión del motor:** 22.5.0 · [Web: cómo funciona Scan Titan](https://rogerf5-security.github.io/Scan-Titan/) · [Historial de versiones](CHANGELOG.md)
+**Versión del motor:** 22.6.0 · [Web: cómo funciona Scan Titan](https://rogerf5-security.github.io/Scan-Titan/) · [Historial de versiones](CHANGELOG.md)
 
 ![Daily Report de Scan Titan: vulnerabilidades vigentes por severidad a lo largo del tiempo](assets/daily/daily-evolucion.png)
 
