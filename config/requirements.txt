@@ -9,7 +9,7 @@ pandas
 plotly
 openpyxl
 Pillow
-customtkinter>=5.2,<7
+customtkinter>=6.0.0,<7
 playwright
 psutil
 pywin32; platform_system == "Windows"
