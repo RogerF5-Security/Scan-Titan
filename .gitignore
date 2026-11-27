@@ -7,7 +7,7 @@
 /version_backups/
 /Plantilla0/
 /targets/*
-!/targets/targets.txt
+!/targets/targets.txt.example
 scan_titan_state.json
 scan_titan_runtime.json
 *.log
