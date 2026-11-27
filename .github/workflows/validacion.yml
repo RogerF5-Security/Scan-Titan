@@ -28,7 +28,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Preparar Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6, Node 24
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v6, Node 24
         with:
           python-version: ${{ matrix.python }}
           cache: pip
