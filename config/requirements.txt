@@ -1,6 +1,6 @@
 requests
 aiohttp
-packaging>=23.2
+packaging>=26.4
 beautifulsoup4
 colorama
 tqdm
