@@ -25,7 +25,7 @@ class PublicTemplateTests(unittest.TestCase):
         required = [
             ROOT / "main.py",
             ROOT / "config" / "config.yaml",
-            ROOT / "targets" / "targets.txt",
+            ROOT / "targets" / "targets.txt.example",
             ROOT / "wordlists",
             ROOT / "reports",
             ROOT / "tools" / "health_check.py",
