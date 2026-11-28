@@ -1,6 +1,6 @@
 # Scan Titan
 
-![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white) [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-22c55e)](LICENSE) [![Build](https://github.com/RogerF5-Security/Scan-Titan/actions/workflows/validacion.yml/badge.svg)](https://github.com/RogerF5-Security/Scan-Titan/actions/workflows/validacion.yml)
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white) [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-22c55e)](LICENSE) [![Build](https://github.com/RogerF5-Security/Scan-Titan/actions/workflows/validacion.yml/badge.svg)](https://github.com/RogerF5-Security/Scan-Titan/actions/workflows/validacion.yml) [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/17205/badge)](https://www.bestpractices.dev/projects/17205)
 
 Escáner de vulnerabilidades en Python para Windows y Linux. Reconoce la superficie de un objetivo autorizado y ejecuta pruebas propias junto con Nmap, Nuclei, OWASP ZAP y otras herramientas. Después valida cada hallazgo con controles comparativos y entrega evidencia reproducible. Mantiene además un histórico para comparar cómo evolucionan las vulnerabilidades en el tiempo.
 
